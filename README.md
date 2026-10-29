@@ -12,4 +12,12 @@ Python 환경에서 `pip install -r requirements.txt`, 프런트엔드에서 `np
 
 ## 독립성·이력
 
-독립 클론이며 Git 객체와 실행 DB를 원본에 연결하지 않습니다. `split-base/astergraph-f7548838` 태그가 분리 기준입니다. 이전 커밋에는 회사 지식 코드도 남아 있지만 현재 작업 트리는 민원 기능 범위입니다. 원격 저장소는 설정하지 않았으며 외부 공개하지 않았습니다. 과거 설계/평가 문서는 당시 기록이며 현재 검증 결과와 구분합니다.
+독립 클론이며 Git 객체와 실행 DB를 원본에 연결하지 않습니다. `split-base/astergraph-f7548838` 태그가 분리 기준입니다. 이전 커밋에는 회사 지식 코드도 남아 있지만 현재 작업 트리는 민원 기능 범위입니다. 원격 저장소는 [Hangi-n42/Civil-Complaints-Workbench](https://github.com/Hangi-n42/Civil-Complaints-Workbench)이며 비공개로 보존합니다. 기존 자동화가 실행되지 않도록 GitHub Actions는 비활성화했습니다. 과거 설계/평가 문서는 당시 기록이며 현재 검증 결과와 구분합니다.
+
+## 로컬 복원
+
+```bash
+git clone https://github.com/Hangi-n42/Civil-Complaints-Workbench.git
+```
+
+Git에 기록된 코드·자료·이력·태그를 복원합니다. 실행 DB·개인 설정·설치 패키지·빌드 캐시는 포함하지 않으며, 실행 환경은 위 안내대로 준비합니다.
