@@ -9,7 +9,6 @@ from app.api.error_utils import error_response, make_request_id
 from app.complaint_intelligence import get_complaint_intelligence_scheduler
 from app.core.config import settings
 from app.core.logging import api_logger
-from app.api.routers.knowledge import router as knowledge_router, shutdown_knowledge_service
 from app.api.routers import (
     admin_router,
     chroma_debug_router,
@@ -36,7 +35,6 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         scheduler.stop()
-        shutdown_knowledge_service()
     # 종료
     api_logger.info("API 서버 종료")
 
@@ -66,7 +64,6 @@ app.include_router(chroma_debug_router)
 app.include_router(ui_router)
 app.include_router(complaint_intelligence_router)
 app.include_router(admin_router)
-app.include_router(knowledge_router, prefix="/api/v1")
 
 
 @app.exception_handler(RequestValidationError)
