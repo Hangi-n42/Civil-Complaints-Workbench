@@ -16,8 +16,15 @@ Python 환경에서 `pip install -r requirements.txt`, 프런트엔드에서 `np
 
 ## 로컬 복원
 
+Git LFS를 설치한 환경에서 다음과 같이 복원합니다.
+
 ```bash
 git clone https://github.com/Hangi-n42/Civil-Complaints-Workbench.git
+cd Civil-Complaints-Workbench
+git lfs install --local
+git lfs pull
 ```
+
+법령 데이터와 모델 파일의 실제 내용은 Git LFS에 보존됩니다. 과거 버전의 LFS 데이터까지 내려받으려면 `git lfs fetch --all origin`을 실행합니다.
 
 Git에 기록된 코드·자료·이력·태그를 복원합니다. 실행 DB·개인 설정·설치 패키지·빌드 캐시는 포함하지 않으며, 실행 환경은 위 안내대로 준비합니다.
