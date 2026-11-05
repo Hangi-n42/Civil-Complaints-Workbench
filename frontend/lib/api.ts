@@ -635,11 +635,13 @@ export async function searchCasesApi(params: {
     category?: string;
   };
   caseContext?: WorkbenchCaseContext;
+  signal?: AbortSignal;
 }): Promise<ApiResponse<SearchResponseData>> {
   try {
     const filters = normalizeSearchFilters(params.filters);
     const payload = await fetchBackend<BackendSearchData>("/api/v1/search", {
       method: "POST",
+      signal: params.signal,
       body: JSON.stringify({
         complaint_id: params.complaintId,
         query: params.query,
@@ -666,11 +668,13 @@ export async function runQaApi(params: {
     category?: string;
   };
   caseContext?: WorkbenchCaseContext;
+  signal?: AbortSignal;
 }): Promise<ApiResponse<QaResponseData>> {
   try {
     const filters = normalizeSearchFilters(params.filters);
     const payload = await fetchBackend<BackendQaData>("/api/v1/qa", {
       method: "POST",
+      signal: params.signal,
       body: JSON.stringify({
         complaint_id: params.complaintId,
         query: params.query,
@@ -720,12 +724,15 @@ export async function streamQaApi(
       category?: string;
     };
     caseContext?: WorkbenchCaseContext;
+    signal?: AbortSignal;
   },
   onStage?: (stage: string, label: string) => void,
 ): Promise<ApiResponse<QaResponseData>> {
   try {
+    params.signal?.throwIfAborted();
     const response = await fetch(`${API_BASE_URL}/api/v1/qa/stream`, {
       method: "POST",
+      signal: params.signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         complaint_id: params.complaintId,
@@ -738,6 +745,7 @@ export async function streamQaApi(
       }),
     });
 
+    params.signal?.throwIfAborted();
     if (!response.ok || !response.body) {
       return runQaApi(params); // 스트림 불가 → 비스트림 폴백
     }
@@ -750,6 +758,7 @@ export async function streamQaApi(
 
     for (;;) {
       const { value, done } = await reader.read();
+      params.signal?.throwIfAborted();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       let sep: number;
@@ -778,7 +787,10 @@ export async function streamQaApi(
       return { data: doneData, error: null };
     }
     return runQaApi(params); // done 없이 종료 → 폴백
-  } catch {
+  } catch (error) {
+    if (params.signal?.aborted) {
+      return { data: mockQaData(params), error: toApiError(error) };
+    }
     return runQaApi(params); // 네트워크/파싱 실패 → 폴백
   }
 }
