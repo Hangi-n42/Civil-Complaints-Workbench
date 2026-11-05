@@ -388,12 +388,15 @@ async def run_analysis(request: RunAnalysisRequest) -> RunAnalysisResponse:
 
     request_id = request.request_id or make_request_id()
     service = get_complaint_intelligence_service()
-    result = service.run_analysis(
-        request.events,
-        mode=request.mode,
-        source_name=request.source_name,
-        as_of=request.as_of,
-    )
+    try:
+        result = service.run_analysis(
+            request.events,
+            mode=request.mode,
+            source_name=request.source_name,
+            as_of=request.as_of,
+        )
+    except DuplicateMergeConflict as exc:
+        return _duplicate_conflict_response(exc)
     api_logger.info(
         "Complaint Intelligence analysis completed: request_id=%s events=%s alerts=%s public_insights=%s",
         request_id,
@@ -499,7 +502,10 @@ async def get_collector_status() -> CollectorStatusResponse:
 async def poll_collector_once() -> CollectorPollOnceResponse:
     """collector에서 이벤트를 1회 수집해 저장만 하고 분석은 실행하지 않는다."""
 
-    result = get_complaint_intelligence_scheduler().poll_once()
+    try:
+        result = get_complaint_intelligence_scheduler().poll_once()
+    except DuplicateMergeConflict as exc:
+        return _duplicate_conflict_response(exc)
     return CollectorPollOnceResponse(
         request_id=make_request_id(),
         timestamp=now_iso(),
@@ -519,12 +525,15 @@ async def run_dashboard_analysis(request: RunAnalysisRequest) -> DashboardRespon
 
     request_id = request.request_id or make_request_id()
     service = get_complaint_intelligence_service()
-    result = service.run_analysis(
-        request.events,
-        mode=request.mode,
-        source_name=request.source_name,
-        as_of=request.as_of,
-    )
+    try:
+        result = service.run_analysis(
+            request.events,
+            mode=request.mode,
+            source_name=request.source_name,
+            as_of=request.as_of,
+        )
+    except DuplicateMergeConflict as exc:
+        return _duplicate_conflict_response(exc)
     api_logger.info(
         "Complaint Intelligence dashboard analysis completed: request_id=%s events=%s alerts=%s public_insights=%s",
         request_id,
@@ -562,12 +571,15 @@ async def run_duplicate_group_analysis(request: RunAnalysisRequest) -> Duplicate
 
     request_id = request.request_id or make_request_id()
     service = get_complaint_intelligence_service()
-    groups = service.run_duplicate_analysis(
-        request.events,
-        mode=request.mode,
-        source_name=request.source_name,
-        as_of=request.as_of,
-    )
+    try:
+        groups = service.run_duplicate_analysis(
+            request.events,
+            mode=request.mode,
+            source_name=request.source_name,
+            as_of=request.as_of,
+        )
+    except DuplicateMergeConflict as exc:
+        return _duplicate_conflict_response(exc)
     api_logger.info(
         "Duplicate merge analysis completed: request_id=%s events=%s groups=%s",
         request_id,

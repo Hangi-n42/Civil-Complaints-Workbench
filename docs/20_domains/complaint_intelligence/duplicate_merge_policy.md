@@ -74,6 +74,15 @@ FE는 버튼 노출을 status만으로 판단하지 말고 반드시 `allowed_ac
 - confirmed: split/draft_reply
 - split/rejected: action 없음
 
+## 재분석과 담당자 판단 보존
+
+- 동일 구성원의 재분석은 저장된 confirmed/split/rejected 레코드 전체를 보존하고 그 저장값을 반환합니다. candidate만 새 계산 결과로 갱신합니다.
+- 검토된 구성원의 점수·위험·대표 선정·초안에 쓰는 입력(접수 시각, 마스킹 본문, 위치, 부서, 구조화 텍스트, 요청, 개체, 담당 업무, 분류, PII 상태)이 바뀌면 일반 분석과 중복 분석 모두 `409 DUPLICATE_GROUP_REVIEW_REQUIRED`로 중단합니다. 기존 판단과 이벤트를 덮어쓰지 않습니다.
+- dashboard/public-insights 분석과 collector poll도 같은 보호를 적용합니다. 스케줄러는 `ran=false, reason=DUPLICATE_GROUP_REVIEW_REQUIRED`로 실패를 기록하며 분석 최소 건수 미달 시에도 근거를 덮거나 watermark/checkpoint를 진행하지 않습니다.
+- 처리 상태, pipeline/prompt/model 버전, 현재 중복 점수에서 사용하지 않는 저장 embedding, 구조화 요소의 confidence/span/status, 분석 실행의 source/as_of 등 위 판단 입력 외 메타데이터 변경은 허용합니다.
+- 구성원이 추가·제외되면 구성원 ID에 따른 별도 candidate가 생성되며 이전 그룹의 판단을 승계하지 않습니다. 이전 그룹과 근거는 남습니다.
+- 변경 입력을 재검토하는 별도 버전/승인 UI는 이 정책에서 구현하지 않습니다. 같은 민원 ID의 검토 근거를 자동 교체하지 않으며, 변경된 사건은 별도 버전 ID로 전달해 새 후보로 검토해야 합니다.
+
 ## draft-reply와 reply-draft
 
 - `draft-reply`: confirmed 그룹에서만 BE3 전달용 payload 생성

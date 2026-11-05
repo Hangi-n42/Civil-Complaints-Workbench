@@ -13,6 +13,7 @@ from app.complaint_intelligence.collector import (
     build_complaint_event_collector,
 )
 from app.complaint_intelligence.config import ComplaintIntelligenceConfig
+from app.complaint_intelligence.duplicate_merger.service import DuplicateMergeConflict
 from app.complaint_intelligence.repository import CollectorCheckpointRecord
 from app.complaint_intelligence.schemas import ComplaintIntelligenceEvent
 from app.complaint_intelligence.service import ComplaintIntelligenceService, get_complaint_intelligence_service
@@ -107,31 +108,31 @@ class ComplaintIntelligenceScheduler:
         with self._run_lock:
             batch = self.collector.collect_since(self._last_watermark, self._collector_limit())
             safe_events = _safe_events(batch.events)
-            if safe_events:
-                self.service.repository.save_events(safe_events)
-            if len(safe_events) < self.config.scheduler_min_events:
-                result = SchedulerRunResult(
-                    ran=False,
-                    reason="not_enough_events",
-                    event_count=len(safe_events),
-                    as_of=_resolve_as_of(safe_events),
-                    collector_source_name=batch.source_name,
-                    collector_mode=batch.mode,
-                    collector_watermark=batch.watermark,
-                )
-                if safe_events:
-                    self._save_checkpoint(
-                        trigger="scheduler",
-                        mode=batch.mode,
-                        event_count=len(safe_events),
-                        watermark=batch.watermark,
-                        batch_metadata=batch.metadata,
-                    )
-                    self._last_watermark = batch.watermark
-                self._record_result(result)
-                return result
-
             try:
+                if len(safe_events) < self.config.scheduler_min_events:
+                    if safe_events:
+                        self.service.save_events(safe_events)
+                    result = SchedulerRunResult(
+                        ran=False,
+                        reason="not_enough_events",
+                        event_count=len(safe_events),
+                        as_of=_resolve_as_of(safe_events),
+                        collector_source_name=batch.source_name,
+                        collector_mode=batch.mode,
+                        collector_watermark=batch.watermark,
+                    )
+                    if safe_events:
+                        self._save_checkpoint(
+                            trigger="scheduler",
+                            mode=batch.mode,
+                            event_count=len(safe_events),
+                            watermark=batch.watermark,
+                            batch_metadata=batch.metadata,
+                        )
+                        self._last_watermark = batch.watermark
+                    self._record_result(result)
+                    return result
+
                 analysis = self.service.run_analysis(
                     safe_events,
                     mode=self.config.scheduler_mode,
@@ -157,7 +158,7 @@ class ComplaintIntelligenceScheduler:
                 self.logger.warning("Complaint Intelligence scheduler run failed: %s", type(exc).__name__)
                 result = SchedulerRunResult(
                     ran=False,
-                    reason="analysis_failed",
+                    reason=exc.code if isinstance(exc, DuplicateMergeConflict) else "analysis_failed",
                     event_count=len(safe_events),
                     as_of=_resolve_as_of(safe_events),
                     collector_source_name=batch.source_name,
@@ -196,7 +197,7 @@ class ComplaintIntelligenceScheduler:
             batch = self.collector.collect_since(self._last_poll_watermark, self._collector_limit())
             safe_events = _safe_events(batch.events)
             if safe_events:
-                self.service.repository.save_events(safe_events)
+                self.service.save_events(safe_events)
             result = CollectorPollResult(
                 source_name=batch.source_name,
                 mode=batch.mode,
