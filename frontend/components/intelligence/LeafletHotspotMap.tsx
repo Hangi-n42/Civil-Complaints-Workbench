@@ -91,7 +91,7 @@ export function LeafletHotspotMap({
                 <div className="w-56 space-y-2 text-xs text-slate-700">
                   <div>
                     <div className="font-extrabold text-slate-900">{alert.title}</div>
-                    <div className="mt-1 text-slate-500">{point.source === "center" ? "관측 중심" : `${point.label} 대표 위치`}</div>
+                    <div className="mt-1 text-slate-500">{point.source === "center" ? "저장된 분석 중심 · 원본 현장 좌표 여부 미확인" : `시연용 ${point.label} 대표 위치`}</div>
                   </div>
                   <div>{formatIssueAlertTrend(alert)}</div>
                   <div className="flex flex-wrap gap-1">

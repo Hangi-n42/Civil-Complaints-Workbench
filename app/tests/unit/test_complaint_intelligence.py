@@ -708,7 +708,7 @@ def test_complaint_intelligence_dashboard_returns_fe_ready_cards() -> None:
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["tabs"] == [
-        {"id": "issue_alerts", "label": "실시간 이슈"},
+        {"id": "issue_alerts", "label": "이슈 경보"},
         {"id": "public_insights", "label": "행정 인사이트"},
     ]
     assert data["summary"]["alert_count"] >= 1

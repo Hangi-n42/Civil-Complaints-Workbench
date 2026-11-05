@@ -359,6 +359,32 @@ export type IntelDashboardData = {
   issue_alerts: IntelIssueAlertCard[];
   public_insights: IntelPublicInsightCard[];
   empty_state: Record<string, string>; // 알려진 키: issue_alerts, public_insights
+  operation?: "stored_read" | "new_analysis";
+  provenance_runs?: IntelRunProvenance[];
+};
+
+export type IntelRunProvenance = {
+  run_id: string;
+  analysis_type: string | null;
+  mode: string;
+  status: string;
+  source_name: string | null;
+  started_at: string;
+  completed_at: string | null;
+  as_of: string;
+  source: {
+    source_policies: string[];
+    source_datasets: string[];
+    time_basis: "scenario_replay" | "unknown";
+    location_basis: "scenario_assigned" | "unknown";
+    structured_fields_basis: "scenario_template" | "unknown";
+  };
+  generation_methods: string[];
+  provider: string | null;
+  provider_class: string | null;
+  model: string | null;
+  llm_attempt_count: number | null;
+  fallback_count: number | null;
 };
 
 // run-analysis 요청 이벤트(핸드오프 §2.2). events 소스가 정해지기 전까지는 미사용.
@@ -539,11 +565,15 @@ export async function fetchIntelDashboardApi(filters?: {
 export async function runIntelAnalysisApi(payload: {
   request_id?: string;
   events: IntelAnalysisEvent[];
+  mode?: "realtime" | "replay" | "manual";
+  source_name?: string;
+  as_of?: string;
+  source_provenance?: IntelRunProvenance["source"];
 }): Promise<ApiResponse<IntelDashboardData>> {
   try {
     const data = await fetchBackend<IntelDashboardData>("/complaint-intelligence/dashboard/run-analysis", {
       method: "POST",
-      body: JSON.stringify({ request_id: payload.request_id, events: payload.events }),
+      body: JSON.stringify(payload),
     });
     return { data, error: null };
   } catch (error) {

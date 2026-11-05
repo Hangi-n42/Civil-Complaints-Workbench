@@ -41,6 +41,7 @@ export function HotspotMap({
   const visibleAlerts = sortedAlerts.filter((alert) => resolveHotspotMapPoint(alert) !== null);
   const unknownAlerts = sortedAlerts.filter((alert) => resolveHotspotMapPoint(alert) === null);
   const selectedAlert = sortedAlerts.find((alert) => alert.id === focusedAlertId) ?? null;
+  const selectedPoint = selectedAlert ? resolveHotspotMapPoint(selectedAlert) : null;
   const mapHeightClass = size === "large" ? "h-[520px] md:h-[620px]" : "h-[340px] md:h-[380px] xl:h-[420px]";
   const detailClass = size === "large" ? "grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]" : "";
 
@@ -64,7 +65,7 @@ export function HotspotMap({
             </span>
           </div>
         </div>
-        <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500">민원 발생 중심과 반경을 확인합니다.</p>
+        <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500">저장된 분석 중심 또는 시연용 행정구역 대표 위치입니다. 원과 반경은 분석 표시이며 실제 발생 범위를 확인한 값이 아닙니다.</p>
       </div>
 
       <div className={`relative overflow-hidden rounded-lg border border-slate-200 bg-slate-50 ${mapHeightClass}`}>
@@ -93,6 +94,7 @@ export function HotspotMap({
               {selectedAlert.region && <span className="text-xs font-semibold text-slate-500">{selectedAlert.region}</span>}
             </div>
             <h3 className="mt-2 line-clamp-2 text-sm font-extrabold text-slate-900">{selectedAlert.title}</h3>
+            <p className="mt-1 text-xs text-slate-500">{selectedPoint?.source === "region" ? "시연용 행정구역 대표 위치" : selectedPoint ? "저장된 분석 중심 · 원본 현장 좌표 여부 미확인" : "위치 미확인"}</p>
             <p className="mt-1 text-xs font-medium text-slate-600">{formatIssueAlertTrend(selectedAlert)}</p>
           </div>
           <div>
