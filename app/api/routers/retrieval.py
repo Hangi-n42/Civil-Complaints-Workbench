@@ -62,16 +62,14 @@ def _log_error(
     error_code: str,
     retryable: bool,
     took_ms: int,
-    message: str,
 ) -> None:
     api_logger.error(
-        "api_error endpoint=%s request_id=%s error_code=%s retryable=%s latency_ms=%s message=%s",
+        "api_error endpoint=%s request_id=%s error_code=%s retryable=%s latency_ms=%s",
         endpoint,
         request_id,
         error_code,
         retryable,
         took_ms,
-        message,
     )
 
 
@@ -110,7 +108,7 @@ def _log_routing_decision(
     applied_params: dict,
 ) -> None:
     api_logger.info(
-        "routing_decision endpoint=%s request_id=%s analyzer_latency_ms=%s route_key=%s strategy_id=%s complexity_level=%s complexity_score=%.3f router_latency_ms=%s applied_params=%s",
+        "routing_decision endpoint=%s request_id=%s analyzer_latency_ms=%s route_key=%s strategy_id=%s complexity_level=%s complexity_score=%.3f router_latency_ms=%s top_k=%s filter_count=%s",
         endpoint,
         request_id,
         analyzer_latency,
@@ -119,7 +117,8 @@ def _log_routing_decision(
         complexity_level,
         complexity_score,
         router_latency,
-        applied_params,
+        applied_params.get("top_k"),
+        len(applied_params.get("applied_filters") or {}),
     )
 
 
@@ -202,7 +201,6 @@ async def index_documents(request: IndexRequest) -> IndexResponse:
             error_code="BAD_REQUEST",
             retryable=False,
             took_ms=took_ms,
-            message="cases는 최소 1건 이상이어야 합니다.",
         )
         return error_response(
             request_id=request_id,
@@ -228,7 +226,6 @@ async def index_documents(request: IndexRequest) -> IndexResponse:
             error_code="PROCESSING_ERROR",
             retryable=True,
             took_ms=took_ms,
-            message=str(e),
         )
         return error_response(
             request_id=request_id,
@@ -244,7 +241,6 @@ async def index_documents(request: IndexRequest) -> IndexResponse:
             error_code="INTERNAL_SERVER_ERROR",
             retryable=False,
             took_ms=took_ms,
-            message=str(e),
         )
         return error_response(
             request_id=request_id,
@@ -296,7 +292,6 @@ async def search_documents(request: SearchRequest) -> SearchResponse:
             error_code="BAD_REQUEST",
             retryable=False,
             took_ms=took_ms,
-            message="query는 비어 있을 수 없습니다.",
         )
         return error_response(
             request_id=request_id,
@@ -356,7 +351,6 @@ async def search_documents(request: SearchRequest) -> SearchResponse:
             error_code="INDEX_NOT_READY",
             retryable=True,
             took_ms=took_ms,
-            message=str(e),
         )
         return error_response(
             request_id=request_id,
@@ -372,7 +366,6 @@ async def search_documents(request: SearchRequest) -> SearchResponse:
             error_code="INTERNAL_SERVER_ERROR",
             retryable=False,
             took_ms=took_ms,
-            message=str(e),
         )
         return error_response(
             request_id=request_id,

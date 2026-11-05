@@ -188,7 +188,7 @@ class GenerationService:
                 stage=stage,
                 upstream_status=None,
                 error_code="MODEL_NOT_READY",
-                error_message=f"Ollama 연결 거부: {str(e)}",
+                error_message=f"Ollama 연결 거부: {type(e).__name__}",
                 retryable=True,
             )
             raise GenerationError(
@@ -213,7 +213,7 @@ class GenerationService:
                 stage=stage,
                 upstream_status=None,
                 error_code="MODEL_NOT_READY",
-                error_message=f"Ollama 연결 타임아웃: {str(e)}",
+                error_message=f"Ollama 연결 타임아웃: {type(e).__name__}",
                 retryable=True,
             )
             raise GenerationError(
@@ -239,7 +239,7 @@ class GenerationService:
                 stage=stage,
                 upstream_status=None,
                 error_code="MODEL_TIMEOUT",
-                error_message=f"Ollama 읽기 타임아웃: {str(e)}",
+                error_message=f"Ollama 읽기 타임아웃: {type(e).__name__}",
                 retryable=True,
             )
             raise GenerationError(
@@ -373,7 +373,7 @@ class GenerationService:
                 stage=stage,
                 upstream_status=None,
                 error_code="PROCESSING_ERROR",
-                error_message=f"Ollama HTTP 오류: {type(e).__name__} - {str(e)}",
+                error_message=f"Ollama HTTP 오류: {type(e).__name__}",
                 retryable=True,
             )
             raise GenerationError(
@@ -401,7 +401,7 @@ class GenerationService:
                 stage=stage,
                 upstream_status=None,
                 error_code="PROCESSING_ERROR",
-                error_message=f"Ollama 예기치 않은 오류: {type(e).__name__} - {str(e)}",
+                error_message=f"Ollama 예기치 않은 오류: {type(e).__name__}",
                 retryable=True,
             )
             raise GenerationError(
@@ -444,7 +444,7 @@ class GenerationService:
         except RetrievalError:
             raise
         except Exception as e:
-            self.logger.error(f"프롬프트 구성 실패: {str(e)}")
+            self.logger.error("프롬프트 구성 실패: error_type=%s", type(e).__name__)
             raise GenerationError(
                 f"프롬프트 구성 실패: {str(e)}",
                 code="PROCESSING_ERROR",
@@ -472,7 +472,7 @@ class GenerationService:
         except RetrievalError:
             raise
         except Exception as e:
-            self.logger.error(f"원문 레코드 기반 프롬프트 구성 실패: {str(e)}")
+            self.logger.error("원문 레코드 기반 프롬프트 구성 실패: error_type=%s", type(e).__name__)
             raise GenerationError(
                 f"프롬프트 구성 실패: {str(e)}",
                 code="PROCESSING_ERROR",
@@ -508,12 +508,12 @@ class GenerationService:
             derived_query = str(derived_trace.get("derived_query") or "")
             search_query = str(derived_trace.get("search_query") or "")
             self.logger.info(
-                "autoretrieve trace: derived_query=%s, search_query=%s, collection=%s, top_k=%s, filters=%s, threshold=%s, topic=%s, complexity=%s, route=%s, strategy=%s, policy=%s",
-                derived_query,
-                search_query,
+                "autoretrieve trace: derived_query_length=%s, search_query_length=%s, collection=%s, top_k=%s, filter_count=%s, threshold=%s, topic=%s, complexity=%s, route=%s, strategy=%s, policy=%s",
+                len(derived_query),
+                len(search_query),
                 str(derived_trace.get("collection_name") or collection_name),
                 str(derived_trace.get("effective_top_k") or top_k),
-                str(derived_trace.get("filters") or filters or {}),
+                len(derived_trace.get("filters") or filters or {}),
                 str(derived_trace.get("threshold") or threshold),
                 str(derived_trace.get("topic_type") or ""),
                 str(derived_trace.get("complexity_level") or ""),
@@ -525,13 +525,12 @@ class GenerationService:
             return prompt, context, derived_trace
         except RetrievalError as e:
             self.logger.warning(
-                "원문 레코드 자동검색 프롬프트 구성 실패(retrieval): %s details=%s",
-                str(e),
-                str(getattr(e, "details", {})),
+                "원문 레코드 자동검색 프롬프트 구성 실패(retrieval): error_type=%s",
+                type(e).__name__,
             )
             raise
         except Exception as e:
-            self.logger.error(f"원문 레코드 자동검색 프롬프트 구성 실패: {str(e)}")
+            self.logger.error("원문 레코드 자동검색 프롬프트 구성 실패: error_type=%s", type(e).__name__)
             raise GenerationError(
                 f"프롬프트 구성 실패: {str(e)}",
                 code="PROCESSING_ERROR",
@@ -717,7 +716,7 @@ class GenerationService:
 
             return citations
         except Exception as e:
-            self.logger.error(f"Citation 생성 실패: {str(e)}")
+            self.logger.error("Citation 생성 실패: error_type=%s", type(e).__name__)
             raise GenerationError(
                 f"Citation 생성 실패: {str(e)}",
                 code="PROCESSING_ERROR",
@@ -799,7 +798,7 @@ class GenerationService:
             extra = "\n\n" + LEGAL_CITATION_INSTRUCTION + "\n" + build_legal_context_block(articles)
             return articles, extra, {"status": "grounded", "error": ""}
         except Exception as e:  # noqa: BLE001
-            self.logger.warning("법령 그라운딩 준비 생략: %s", e)
+            self.logger.warning("법령 그라운딩 준비 생략: error_type=%s", type(e).__name__)
             return [], "", {
                 "status": "error",
                 "error": f"{type(e).__name__}: legal grounding unavailable",
@@ -890,7 +889,7 @@ class GenerationService:
             result["legal_citations"] = g["valid"]
             result["legal_citation_warnings"] = g["warnings"]
         except Exception as e:  # noqa: BLE001
-            self.logger.warning("법령 인용 검증 생략: %s", e)
+            self.logger.warning("법령 인용 검증 생략: error_type=%s", type(e).__name__)
             grounding_status["status"] = "error"
             grounding_status["error"] = (
                 f"{type(e).__name__}: legal citation validation unavailable"
@@ -921,7 +920,7 @@ class GenerationService:
             }
         """
         try:
-            self.logger.info(f"QA 응답 생성: query='{query}'")
+            self.logger.info("QA 응답 생성: query_length=%s context_count=%s", len(query), len(context))
 
             parsed: Dict[str, Any] = {}
             last_parse_error: GenerationError | None = None
@@ -993,11 +992,12 @@ class GenerationService:
                             "attempt": attempt_index,
                             "stage": step["stage"],
                             "code": e.code,
-                            "message": str(e),
+                            "error_type": type(e).__name__,
                         }
                     )
                     self.logger.warning(
-                        f"QA JSON 파싱 재시도 {attempt_index}/{len(retry_steps)}: {str(e)}"
+                        "QA JSON 파싱 재시도: attempt=%s max_attempts=%s error_code=%s error_type=%s",
+                        attempt_index, len(retry_steps), e.code, type(e).__name__,
                     )
 
             if not parsed:
@@ -1068,7 +1068,7 @@ class GenerationService:
         except GenerationError:
             raise
         except Exception as e:
-            self.logger.error(f"QA 응답 생성 실패: {str(e)}")
+            self.logger.error("QA 응답 생성 실패: error_type=%s", type(e).__name__)
             raise GenerationError(
                 f"QA 응답 생성 실패: {str(e)}",
                 code="PROCESSING_ERROR",
