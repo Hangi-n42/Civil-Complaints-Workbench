@@ -29,7 +29,7 @@ def test_structure_response_is_wrapped(monkeypatch):
         lambda: _StubStructuringService(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/structure",
         json={
@@ -49,7 +49,7 @@ def test_structure_response_is_wrapped(monkeypatch):
 
 
 def test_structure_rejects_empty_body():
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post("/api/v1/structure", json={"request_id": "STR-EMPTY"})
 
     assert response.status_code == 400

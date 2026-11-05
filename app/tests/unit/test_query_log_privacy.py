@@ -189,7 +189,7 @@ def test_direct_and_workbench_api_logs_keep_request_diagnostics_without_input(
             "top_k": 1, "snippet_max_chars": 400, "chunk_policy": "compact",
         }
 
-    response = TestClient(app).post(f"/api/v1/{endpoint}", json=payload)
+    response = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000)).post(f"/api/v1/{endpoint}", json=payload)
 
     if endpoint.endswith("stream"):
         assert response.status_code == 200
@@ -213,7 +213,7 @@ def test_unhandled_stream_exception_does_not_log_traceback_input(log_output, cap
     payload = {"query": QUERY}
     if include_request_id:
         payload["request_id"] = "REQ-PRIVATE-STREAM-42"
-    response = TestClient(app).post("/api/v1/qa/stream", json=payload)
+    response = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000)).post("/api/v1/qa/stream", json=payload)
 
     assert "event: error" in response.text
     error = json.loads(next(line[6:] for line in response.text.splitlines() if line.startswith("data: ")))

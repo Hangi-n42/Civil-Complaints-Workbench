@@ -669,7 +669,7 @@ def test_public_insight_type_literal_matches_requested_types() -> None:
 
 
 def test_public_insight_api_run_analysis_and_lookup() -> None:
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     events = [
         {
             "id": f"api-{index}",
@@ -692,7 +692,7 @@ def test_public_insight_api_run_analysis_and_lookup() -> None:
 
 
 def test_complaint_intelligence_dashboard_returns_fe_ready_cards() -> None:
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     events = [
         {
             "id": f"dashboard-{index}",

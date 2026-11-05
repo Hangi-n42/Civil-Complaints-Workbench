@@ -130,7 +130,7 @@ def test_search_response_is_wrapped(monkeypatch):
         lambda: _StubRetrievalService(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/search",
         json={"request_id": "SRCH-2026-000001", "query": "가로등", "top_k": 5},
@@ -228,7 +228,7 @@ def test_search_response_orders_rel2_above_rel1_after_grounding(monkeypatch):
         lambda: _GroundedRankingRetrievalService(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/search",
         json={"request_id": "SRCH-2026-REL-RANK", "query": "도로 보수", "top_k": 5},
@@ -299,7 +299,7 @@ def test_search_passes_request_segments_for_complex_query(monkeypatch):
         },
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/search",
         json={
@@ -326,7 +326,7 @@ def test_index_response_is_wrapped(monkeypatch):
         lambda: _StubRetrievalService(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/index",
         json={
@@ -358,7 +358,7 @@ def test_search_bad_request_retryable_false(monkeypatch):
         lambda: _StubRetrievalService(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/search",
         json={"request_id": "SRCH-2026-000099", "query": "   ", "top_k": 5},
@@ -380,7 +380,7 @@ def test_search_index_not_ready_retryable_true(monkeypatch):
         lambda: _FailSearchService(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/search",
         json={"request_id": "SRCH-2026-000100", "query": "가로등", "top_k": 5},

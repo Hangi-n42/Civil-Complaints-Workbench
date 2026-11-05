@@ -95,7 +95,7 @@ def test_scheduler_api_run_once_and_analysis_runs_are_pii_safe() -> None:
     scheduler = ComplaintIntelligenceScheduler(service, config=config)
     set_complaint_intelligence_service(service)
     set_complaint_intelligence_scheduler(scheduler)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
 
     run_response = client.post("/complaint-intelligence/scheduler/run-once")
     assert run_response.status_code == 200

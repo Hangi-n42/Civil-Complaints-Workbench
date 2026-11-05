@@ -8,6 +8,7 @@ from fastapi import APIRouter
 
 from app.api.error_utils import error_response, make_request_id, now_iso
 from app.core.logging import api_logger
+from app.core.config import settings
 from app.ui.services.ui_case_adapter import load_ui_cases_from_json
 
 router = APIRouter(prefix="/api/v1/ui", tags=["ui"])
@@ -17,12 +18,7 @@ router = APIRouter(prefix="/api/v1/ui", tags=["ui"])
 async def list_ui_cases():
     """UI(Home/Queue) 전용 케이스 목록을 반환한다."""
     request_id = make_request_id()
-    sample_path = (
-        Path(__file__).resolve().parents[3]
-        / "data"
-        / "demo"
-        / "pending_cases_8.json"
-    )
+    sample_path = Path(settings.UI_CASES_DATA_PATH)
 
     try:
         cases = load_ui_cases_from_json(sample_path)

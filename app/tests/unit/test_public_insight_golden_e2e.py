@@ -256,7 +256,7 @@ def test_quality_gate_catches_low_actionability() -> None:
 
 
 def test_public_insight_evidence_pack_debug_endpoint_returns_masked_pack() -> None:
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     events = [
         {
             "id": f"debug-{idx}",

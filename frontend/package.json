@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "replay:prepare": "node scripts/prepareComplaintIntelligenceReplay.mjs",
-    "dev": "next dev --webpack",
+    "dev": "node scripts/runLocalNext.mjs dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/runLocalNext.mjs start",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest"
