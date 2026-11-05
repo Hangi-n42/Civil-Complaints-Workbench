@@ -180,7 +180,7 @@ def prepare(output: Path, inventory: Path | None = None):
                                           ("rubric_q3_q4_q5", 1536), ("rubric_q1_q7", 640),
                                           ("qwen_feedback", 1536), ("gemma_revision", 1536)]]
     manifest = {
-        "schema_version": "current_stack_quality_manifest_v1", "state": "prepared_not_executed",
+        "schema_version": "current_stack_quality_manifest_v2", "state": "prepared_not_executed",
         "scope": "현재 제품 POST /api/v1/qa의 고정 근거 기준선; 검색/임베딩/전체 서비스 품질 평가는 제외",
         "exposure": data["exposure"], "cases_sha256": sha(data), "settings": profile,
         "ollama_endpoint": endpoint,
@@ -202,11 +202,12 @@ def prepare(output: Path, inventory: Path | None = None):
         "readonly_http_budget": {"tags": 1, "ps": 57, "note": "모델 요청28회와 별도의 최대58회 loopback GET. 조회 실패 시 중단."},
         "execution_limits": {"call_timeout_seconds": 180, "wall_seconds": 2700,
                              "min_available_memory_bytes": 8 * 1024**3,
-                             "memory_measurement": "macOS vm_stat의 free+inactive+speculative 또는 Linux MemAvailable; reclaim 가능량 추정이며 연속 메모리 압력 측정은 아님",
+                             "memory_guard_version": "cold_headroom_and_macos_pressure_v2",
+                             "memory_measurement": "가용량은 macOS vm_stat free+inactive+speculative 또는 Linux MemAvailable. 검증된 resident_before가 비어 있는 모든 호출은8GiB 필요. macOS 매 호출 전후 sysctl kern.memorystatus_vm_pressure_level=1(normal) 필요; 자기 모델 상주 시 가용량은 기록만. non-macOS는 매 checkpoint8GiB. 연속 측정/OOM 방지 보장 아님",
                              "concurrency": 1, "model_unload_or_keepalive_mutation": False,
                              "stop": ["승인/입력/설정/코드 불일치", "숨은 DB/임베딩 진입", "모델 호출 오류",
                                       "length 종료/usage 누락/입출력 ctx 초과", "14/28콜 또는45분 초과",
-                                      "메모리 여유8GiB 미만/측정 불가", "다른 작업 모델 점유/복수 모델 상주"],
+                                      "모델 미상주 호출 전 여유8GiB 미만/메모리 측정 불가", "macOS pressure warning/critical/알 수 없는 값(non-macOS는 매 checkpoint8GiB)", "다른 작업 모델 점유/복수 모델 상주"],
                              "model_transition": "자기 실행 모델 한 개만 점유하면 제품처럼 다음 모델을 직렬 요청해 Ollama native eviction 사용. 자연만료 추가 대기·keep_alive 변경·강제 unload 없음. 호출 전후 상주 점검."},
         "inventory_evidence": {"source_sha256": sha(inventory_data) if inventory_data else None,
                                "physical_memory_bytes": int(inventory_data["memory"]) if inventory_data else None,
@@ -288,6 +289,20 @@ def available_memory():
     raise EvaluationHalt("memory_measurement_unavailable")
 
 
+def memory_pressure_level():
+    if sys.platform != "darwin":
+        return None
+    try:
+        result = subprocess.run(["/usr/sbin/sysctl", "-n", "kern.memorystatus_vm_pressure_level"],
+                                capture_output=True, text=True, check=True, timeout=5)
+        level = int(result.stdout.strip())
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        raise EvaluationHalt("memory_pressure_measurement_unavailable") from exc
+    if level not in (1, 2, 4):
+        raise EvaluationHalt("memory_pressure_measurement_unavailable")
+    return level
+
+
 class CallLedger:
     def __init__(self, manifest, output, mode, replay=()):
         self.manifest, self.output, self.mode = manifest, output, mode
@@ -298,6 +313,15 @@ class CallLedger:
         self.base_url = None
         self.native_send = None
         self.model_digests = {row["name"]: row.get("digest") for row in manifest["inventory_evidence"]["models"]}
+
+    def memory_checkpoint(self, record, checkpoint):
+        available = record[f"available_memory_{checkpoint}"] = available_memory()
+        pressure = record[f"memory_pressure_{checkpoint}"] = memory_pressure_level()
+        if pressure is not None and pressure != 1:
+            raise EvaluationHalt("memory_pressure_warning_or_critical")
+        if pressure is None or (checkpoint == "before" and not record["resident_before"]):
+            if available < self.manifest["execution_limits"]["min_available_memory_bytes"]:
+                raise EvaluationHalt("memory_headroom_below_8gib")
 
     async def inventory(self):
         import httpx
@@ -405,9 +429,7 @@ class CallLedger:
             else:
                 if self.mode == "live_inference":
                     record["resident_before"] = await self.residents()
-                    record["available_memory_before"] = available_memory()
-                    if record["available_memory_before"] < self.manifest["execution_limits"]["min_available_memory_bytes"]:
-                        raise EvaluationHalt("memory_headroom_below_8gib")
+                    self.memory_checkpoint(record, "before")
                     self.owned_models.add(model)
                 with patch.object(httpx.AsyncClient, "send", tee):
                     result = await native(prompt, temperature, response_schema, **options,
@@ -417,9 +439,7 @@ class CallLedger:
                     if "http_response" not in record:
                         raise EvaluationHalt("native_transport_not_observed")
                     record["resident_after"] = await self.residents()
-                    record["available_memory_after"] = available_memory()
-                    if record["available_memory_after"] < self.manifest["execution_limits"]["min_available_memory_bytes"]:
-                        raise EvaluationHalt("memory_headroom_below_8gib")
+                    self.memory_checkpoint(record, "after")
             record["response"] = result
             if result.get("done_reason") == "length":
                 raise EvaluationHalt("output_truncated_length")

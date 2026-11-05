@@ -5,6 +5,7 @@ import asyncio
 import base64
 import json
 import socket
+from types import SimpleNamespace
 
 import pytest
 
@@ -15,6 +16,7 @@ from scripts import evaluate_current_stack_quality as quality
 def manifest(tmp_path, monkeypatch):
     from app.core.config import settings
     monkeypatch.setattr(settings, "PROMETHEUS_REVISION_MODEL", quality.MODELS["generation"])
+    monkeypatch.setattr(quality, "memory_pressure_level", lambda: 1)
     return quality.prepare(tmp_path / "manifest.json")
 
 
@@ -536,7 +538,7 @@ async def test_foreign_or_multiple_residents_stop_before_native(manifest, tmp_pa
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("checkpoint", ["before", "after"])
-async def test_memory_headroom_gate_preserves_completed_raw_response(manifest, tmp_path, monkeypatch, checkpoint):
+async def test_memavailable_fallback_gate_preserves_completed_raw_response(manifest, tmp_path, monkeypatch, checkpoint):
     import httpx
     from app.generation.service import GenerationService
     original_client = httpx.AsyncClient
@@ -550,6 +552,7 @@ async def test_memory_headroom_gate_preserves_completed_raw_response(manifest, t
         def __init__(self, **kwargs):
             super().__init__(transport=httpx.MockTransport(transport), **kwargs)
     monkeypatch.setattr(httpx, "AsyncClient", SyntheticClient)
+    monkeypatch.setattr(quality, "memory_pressure_level", lambda: None)
     values = iter([7 * 1024**3] if checkpoint == "before" else [16 * 1024**3, 7 * 1024**3])
     monkeypatch.setattr(quality, "available_memory", lambda: next(values))
     ledger = quality.CallLedger(manifest, tmp_path, "live_inference")  # synthetic HTTP control-branch test only
@@ -558,6 +561,104 @@ async def test_memory_headroom_gate_preserves_completed_raw_response(manifest, t
         await ledger.call(GenerationService().call_ollama, "합성 입력")
     assert len(posts) == (1 if checkpoint == "after" else 0)
     assert ledger.records[0]["raw_response_available"] is (checkpoint == "after")
+
+
+@pytest.mark.asyncio
+async def test_loaded_model_low_page_estimate_with_normal_pressure_can_continue(manifest, tmp_path, monkeypatch):
+    import httpx
+    from app.generation.service import GenerationService
+    original_client = httpx.AsyncClient
+    posts = []
+    resident = []
+    async def transport(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"models": [{"name": model} for model in resident]})
+        posts.append(request)
+        resident[:] = [quality.MODELS["generation"]]
+        return httpx.Response(200, json={"response": "합성 응답", "done": True, "done_reason": "stop", "prompt_eval_count": 100, "eval_count": 10})
+    class SyntheticClient(original_client):
+        def __init__(self, **kwargs):
+            super().__init__(transport=httpx.MockTransport(transport), **kwargs)
+    monkeypatch.setattr(httpx, "AsyncClient", SyntheticClient)
+    values = iter([16 * 1024**3, 2964537344, 2964537344, 2964537344])
+    monkeypatch.setattr(quality, "available_memory", lambda: next(values))
+    ledger = quality.CallLedger(manifest, tmp_path, "live_inference")  # synthetic HTTP only
+    ledger.base_url = manifest["ollama_endpoint"]
+    for _ in range(2):
+        assert await ledger.call(GenerationService().call_ollama, "합성 입력") == "합성 응답"
+    assert len(posts) == 2
+    assert ledger.records[0]["memory_pressure_after"] == 1
+    assert ledger.records[1]["available_memory_before"] == 2964537344
+
+
+def test_initial_headroom_and_pressure_are_separate_gates(manifest, tmp_path, monkeypatch):
+    ledger = quality.CallLedger(manifest, tmp_path, "live_inference")
+    ledger.records.append({})
+    monkeypatch.setattr(quality, "available_memory", lambda: 7 * 1024**3)
+    with pytest.raises(quality.EvaluationHalt, match="memory_headroom"):
+        ledger.memory_checkpoint({"resident_before": []}, "before")
+
+
+def test_expired_model_requires_cold_headroom_again(manifest, tmp_path, monkeypatch):
+    ledger = quality.CallLedger(manifest, tmp_path, "live_inference")
+    ledger.records.extend([{}, {}])
+    monkeypatch.setattr(quality, "available_memory", lambda: 2964537344)
+    ledger.memory_checkpoint({"resident_before": [quality.MODELS["generation"]]}, "before")
+    with pytest.raises(quality.EvaluationHalt, match="memory_headroom"):
+        ledger.memory_checkpoint({"resident_before": []}, "before")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("checkpoint", ["before", "after"])
+@pytest.mark.parametrize("pressure", [2, 4])
+async def test_pressure_gate_stops_even_with_high_page_estimate(manifest, tmp_path, monkeypatch, checkpoint, pressure):
+    import httpx
+    from app.generation.service import GenerationService
+    original_client = httpx.AsyncClient
+    posts = []
+    async def transport(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"models": []})
+        posts.append(request)
+        return httpx.Response(200, json={"response": "합성 응답", "done": True, "done_reason": "stop", "prompt_eval_count": 100, "eval_count": 10})
+    class SyntheticClient(original_client):
+        def __init__(self, **kwargs):
+            super().__init__(transport=httpx.MockTransport(transport), **kwargs)
+    monkeypatch.setattr(httpx, "AsyncClient", SyntheticClient)
+    monkeypatch.setattr(quality, "available_memory", lambda: 16 * 1024**3)
+    values = iter([pressure] if checkpoint == "before" else [1, pressure])
+    monkeypatch.setattr(quality, "memory_pressure_level", lambda: next(values))
+    ledger = quality.CallLedger(manifest, tmp_path, "live_inference")  # synthetic HTTP only
+    ledger.base_url = manifest["ollama_endpoint"]
+    with pytest.raises(quality.EvaluationHalt, match="memory_pressure_warning_or_critical"):
+        await ledger.call(GenerationService().call_ollama, "합성 입력")
+    assert len(posts) == (1 if checkpoint == "after" else 0)
+    assert ledger.records[0]["raw_response_available"] is (checkpoint == "after")
+    assert ledger.records[0][f"memory_pressure_{checkpoint}"] == pressure
+
+
+@pytest.mark.parametrize("raw,expected", [("1\n", 1), ("2\n", 2), ("4\n", 4), ("0", None), ("3", None), ("", None)])
+def test_pressure_measurement_is_readonly_and_unknown_values_fail_closed(monkeypatch, raw, expected):
+    monkeypatch.setattr(quality.sys, "platform", "darwin")
+    def observe(command, **kwargs):
+        assert command == ["/usr/sbin/sysctl", "-n", "kern.memorystatus_vm_pressure_level"]
+        assert kwargs["check"] is True and kwargs["timeout"] == 5
+        return SimpleNamespace(stdout=raw)
+    monkeypatch.setattr(quality.subprocess, "run", observe)
+    if expected is None:
+        with pytest.raises(quality.EvaluationHalt, match="memory_pressure_measurement_unavailable"):
+            quality.memory_pressure_level()
+    else:
+        assert quality.memory_pressure_level() == expected
+
+
+def test_pressure_measurement_command_failure_stops(monkeypatch):
+    monkeypatch.setattr(quality.sys, "platform", "darwin")
+    def failed(*args, **kwargs):
+        raise OSError("synthetic sysctl failure")
+    monkeypatch.setattr(quality.subprocess, "run", failed)
+    with pytest.raises(quality.EvaluationHalt, match="memory_pressure_measurement_unavailable"):
+        quality.memory_pressure_level()
 
 
 def test_review_packets_leave_human_values_empty_and_automatic_records_do_not_count(manifest, tmp_path):
