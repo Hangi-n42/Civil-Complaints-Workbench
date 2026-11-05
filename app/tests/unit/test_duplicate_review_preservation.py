@@ -192,7 +192,7 @@ def test_changed_reviewed_inputs_return_api_conflict(tmp_path, monkeypatch, endp
     monkeypatch.setattr(complaint_intelligence, "get_complaint_intelligence_service", lambda: service)
     events[1] = events[1].model_copy(update={"region": "다른아파트"})
 
-    response = TestClient(app).post(
+    response = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000)).post(
         f"/complaint-intelligence/{endpoint}",
         json={"events": [event.model_dump(mode="json") for event in events]},
     )
@@ -258,7 +258,7 @@ def test_collector_api_exposes_review_required_without_mutating_events(tmp_path,
     scheduler = _changed_scheduler(service, events)
     monkeypatch.setattr(complaint_intelligence, "get_complaint_intelligence_scheduler", lambda: scheduler)
 
-    response = TestClient(app).post(f"/complaint-intelligence/{endpoint}")
+    response = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000)).post(f"/complaint-intelligence/{endpoint}")
 
     if endpoint.startswith("collector"):
         assert response.status_code == 409

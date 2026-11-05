@@ -89,7 +89,7 @@ def test_qa_success_exposes_retrieval_done_boundary(monkeypatch):
         generation_router, "get_citation_mapper", lambda: _StubCitationMapper()
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -119,7 +119,7 @@ def test_qa_no_evidence_fallback_exposes_retrieval_done_boundary(monkeypatch):
         generation_router, "get_generation_service", lambda: _FailIfCalledGenerationService()
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={

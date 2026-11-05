@@ -117,7 +117,7 @@ def test_collector_poll_once_api_saves_events_without_exposing_raw_pii() -> None
     )
     set_complaint_intelligence_service(service)
     set_complaint_intelligence_scheduler(scheduler)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
 
     response = client.post("/complaint-intelligence/collector/poll-once")
 

@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from app.api.error_utils import error_response, make_request_id
 from app.complaint_intelligence import get_complaint_intelligence_scheduler
 from app.core.config import settings
+from app.core.local_access import is_local_http_origin, is_loopback_host
 from app.core.logging import api_logger
 from app.api.routers import (
     admin_router,
@@ -50,11 +51,26 @@ app = FastAPI(
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origin_regex=r"https?://(?:localhost|127\.\d+\.\d+\.\d+|\[::1\])(?::\d+)?",
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def local_only_requests(request, call_next):
+    origin = request.headers.get("origin")
+    if (not request.client or not is_loopback_host(request.client.host)
+            or not is_local_http_origin("http://" + request.headers.get("host", ""))
+            or (origin is not None and not is_local_http_origin(origin))):
+        return error_response(
+            request_id=make_request_id(), error_code="LOCAL_ACCESS_ONLY",
+            message="이 민원 시연 서버는 해당 컴퓨터의 로컬 요청만 허용합니다.",
+            status_code=403, retryable=False,
+        )
+    return await call_next(request)
+
 
 # API 라우터 등록
 app.include_router(retrieval_router)

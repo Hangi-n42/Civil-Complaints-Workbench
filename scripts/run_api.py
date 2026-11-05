@@ -14,6 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from app.core.config import settings
+from app.core.local_access import require_loopback_host
 
 if __name__ == "__main__":
     print(f"🚀 API 서버 시작...")
@@ -24,7 +25,7 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "app.api.main:app",
-        host=settings.API_HOST,
+        host=require_loopback_host(settings.API_HOST),
         port=settings.API_PORT,
         reload=settings.DEBUG,
         log_level=settings.LOG_LEVEL.lower(),

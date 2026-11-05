@@ -150,7 +150,7 @@ def test_week6_search_to_qa_e2e_sample10(monkeypatch):
     cases = json.loads(_fixture_path().read_text(encoding="utf-8"))
     assert len(cases) == 10
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
 
     for case in cases:
         query_signals = {
