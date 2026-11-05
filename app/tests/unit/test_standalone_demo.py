@@ -33,9 +33,15 @@ def prepared(tmp_path, monkeypatch):
             CREATE TABLE embedding_metadata(id INTEGER, key TEXT, string_value TEXT);
             INSERT INTO collections VALUES('new', 'physical_new', 2);
             INSERT INTO segments VALUES('segment-new','new','metadata');
+            INSERT INTO segments VALUES('vector-new','new','urn:chroma:segment/vector/hnsw-local-persisted');
             INSERT INTO embeddings VALUES(1,'SYNTHETIC-1','segment-new');
             INSERT INTO embedding_metadata VALUES(1,'chroma:document','합성 검사 원문');
         """)
+    vector = chroma / "vector-new"
+    vector.mkdir()
+    for name in ("header.bin", "data_level0.bin", "length.bin"):
+        (vector / name).write_bytes(b"synthetic-metadata-fixture")
+    (vector / "link_lists.bin").write_bytes(b"")
     activate_collection(chroma, "civil_cases_v3", "physical_new")
     with sqlite3.connect(bundle / "intelligence.db") as conn:
         for table in sorted(demo.CI_TABLES):
@@ -243,3 +249,91 @@ def test_default_profile_preserves_current_product_features_and_roles():
     assert env["PROMETHEUS_FEEDBACK_MODEL"] == "qwen3.8:27b-q4_K_M"
     assert env["CIVIL_LLM_RUBRIC_MODEL"] == env["PROMETHEUS_REVISION_MODEL"] == env["OLLAMA_MODEL"]
     assert (env["GENERATION_NUM_PREDICT"], env["GENERATION_NUM_CTX"], env["OLLAMA_TIMEOUT"]) == ("1536", "8192", "180")
+
+
+def _sdk_bundle(tmp_path, *, persisted=True):
+    import chromadb
+    from chromadb.api.client import SharedSystemClient
+    from chromadb.config import Settings
+
+    bundle = tmp_path / "sdk-bundle"
+    bundle.mkdir()
+    chroma = bundle / "chroma_db"
+    client = chromadb.PersistentClient(path=str(chroma), settings=Settings(anonymized_telemetry=False))
+    metadata = {"hnsw:batch_size": 2, "hnsw:sync_threshold": 2} if persisted else None
+    collection = client.create_collection("civil_cases_v3", embedding_function=None, metadata=metadata)
+    collection.add(ids=["SYNTHETIC-A", "SYNTHETIC-B"], documents=["합성 도로", "합성 소음"], embeddings=[[1.0, 0.0], [0.0, 1.0]])
+    assert collection.query(query_embeddings=[[1.0, 0.0]], n_results=1)["ids"] == [["SYNTHETIC-A"]]
+    client._system.stop()
+    SharedSystemClient.clear_system_cache()
+    with sqlite3.connect(bundle / "intelligence.db") as connection:
+        for table in sorted(demo.CI_TABLES):
+            connection.execute(f"CREATE TABLE {table}(id TEXT)")
+        connection.execute("INSERT INTO ci_events VALUES('SYNTHETIC-A')")
+    (bundle / "asset_manifest.json").write_text(json.dumps({"data_kind": "synthetic", "source": "isolated SDK fixed-vector test"}))
+    (bundle / "ui_cases.json").write_text('[{"id":"SYNTHETIC-A"}]')
+    (bundle / "replay_events.json").write_text('{"events":[{"id":"SYNTHETIC-A"}]}')
+    with sqlite3.connect(chroma / "chroma.sqlite3") as connection:
+        segment = connection.execute("SELECT id FROM segments WHERE type LIKE '%vector%'").fetchone()[0]
+    return bundle, chroma / segment
+
+
+@pytest.mark.parametrize("persisted", [False, True], ids=["default-zero-links-no-pickle", "persisted-with-pickle"])
+def test_sdk_hnsw_normal_formats_copy_and_query_without_embedding(tmp_path, persisted):
+    import chromadb
+    from chromadb.api.client import SharedSystemClient
+    from chromadb.config import Settings
+
+    bundle, vector = _sdk_bundle(tmp_path, persisted=persisted)
+    if not persisted:
+        assert (vector / "link_lists.bin").stat().st_size == 0
+        assert not (vector / "index_metadata.pickle").exists()
+    target = tmp_path / "new-sdk-target"
+    assert demo.prepare_bundle(bundle, target, "civil_cases_v3")["copied"] is True
+    client = chromadb.PersistentClient(path=str(target / "chroma_db"), settings=Settings(anonymized_telemetry=False))
+    try:
+        result = client.get_collection("civil_cases_v3", embedding_function=None).query(query_embeddings=[[1.0, 0.0]], n_results=1)
+        assert result["ids"] == [["SYNTHETIC-A"]]
+    finally:
+        client._system.stop()
+        SharedSystemClient.clear_system_cache()
+
+
+@pytest.mark.parametrize("filename", ["header.bin", "data_level0.bin", "length.bin", "link_lists.bin"])
+@pytest.mark.parametrize("damage", ["missing", "lfs"])
+def test_sdk_required_hnsw_files_rejected_before_copy(tmp_path, filename, damage):
+    bundle, vector = _sdk_bundle(tmp_path)
+    file = vector / filename
+    if damage == "missing":
+        file.unlink()
+    else:
+        file.write_bytes(b"version https://git-lfs.github.com/spec/v1\noid sha256:" + b"a" * 64 + b"\nsize 100000\n")
+    target = tmp_path / "must-not-copy"
+    with pytest.raises(ValueError):
+        demo.prepare_bundle(bundle, target, "civil_cases_v3")
+    assert not target.exists()
+
+
+@pytest.mark.parametrize("filename", ["header.bin", "data_level0.bin", "length.bin", "index_metadata.pickle"])
+def test_sdk_nonempty_hnsw_files_cannot_be_empty(tmp_path, filename):
+    bundle, vector = _sdk_bundle(tmp_path)
+    (vector / filename).write_bytes(b"")
+    with pytest.raises(ValueError):
+        demo.inspect_bundle(bundle, "civil_cases_v3")
+
+
+def test_sdk_optional_hnsw_metadata_lfs_pointer_is_rejected(tmp_path):
+    bundle, vector = _sdk_bundle(tmp_path)
+    (vector / "index_metadata.pickle").write_bytes(b"version https://git-lfs.github.com/spec/v1\n")
+    with pytest.raises(ValueError):
+        demo.inspect_bundle(bundle, "civil_cases_v3")
+
+
+def test_sdk_missing_vector_segment_row_is_rejected_before_copy(tmp_path):
+    bundle, _vector = _sdk_bundle(tmp_path)
+    with sqlite3.connect(bundle / "chroma_db/chroma.sqlite3") as connection:
+        connection.execute("DELETE FROM segments WHERE type LIKE '%vector%'")
+    target = tmp_path / "must-not-copy"
+    with pytest.raises(ValueError, match="vector segment"):
+        demo.prepare_bundle(bundle, target, "civil_cases_v3")
+    assert not target.exists()

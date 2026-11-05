@@ -97,10 +97,22 @@ def inspect_bundle(bundle: Path, collection_name: str) -> dict:
         missing_documents = [item[0] for item in connection.execute(
             f"SELECT e.embedding_id FROM embeddings e JOIN segments s ON e.segment_id=s.id WHERE s.{foreign_key}=? AND NOT EXISTS (SELECT 1 FROM embedding_metadata m WHERE m.id=e.id AND m.key='chroma:document' AND length(trim(m.string_value))>0) ORDER BY e.embedding_id LIMIT 20", (row[0],),
         )]
-        vectors = connection.execute(f"SELECT id, type FROM segments WHERE {foreign_key}=?", (row[0],)).fetchall()
-        for segment_id, kind in vectors:
-            if "vector" in str(kind):
-                require((chroma_dir / str(segment_id)).is_dir() and any((chroma_dir / str(segment_id)).iterdir()), "Chroma vector segment 파일 없음")
+        vectors = [segment_id for segment_id, kind in connection.execute(
+            f"SELECT id, type FROM segments WHERE {foreign_key}=?", (row[0],),
+        ) if "vector" in str(kind)]
+        require(bool(vectors), "Chroma vector segment 행 없음")
+        for segment_id in vectors:
+            segment = chroma_dir / str(segment_id)
+            for filename in ("header.bin", "data_level0.bin", "length.bin"):
+                nonempty_file(segment / filename)
+            links = segment / "link_lists.bin"
+            require(links.is_file(), f"Chroma HNSW 파일 누락: {links}")
+            # SDK의 기본 미동기화 인덱스는 빈 links와 pickle 부재도 정상이다.
+            if links.stat().st_size:
+                nonempty_file(links)
+            metadata = segment / "index_metadata.pickle"
+            if metadata.exists():
+                nonempty_file(metadata)
     finally:
         connection.close()
     connection = read_snapshot(bundle / "intelligence.db")
