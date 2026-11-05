@@ -370,16 +370,14 @@ def _log_error(
     error_code: str,
     retryable: bool,
     took_ms: int,
-    message: str,
 ) -> None:
     api_logger.error(
-        "api_error endpoint=%s request_id=%s error_code=%s retryable=%s latency_ms=%s message=%s",
+        "api_error endpoint=%s request_id=%s error_code=%s retryable=%s latency_ms=%s",
         endpoint,
         request_id,
         error_code,
         retryable,
         took_ms,
-        message,
     )
 
 
@@ -588,9 +586,9 @@ async def _attach_civil_llm_rubric(
         )
     except Exception as exc:  # noqa: BLE001
         api_logger.warning(
-            "civil_llm_rubric_failed request_id=%s error=%s",
+            "civil_llm_rubric_failed request_id=%s error_type=%s",
             str(request.request_id or ""),
-            str(exc),
+            type(exc).__name__,
         )
         rubric_result = {
             "case_id": str(request.complaint_id or ""),
@@ -760,9 +758,9 @@ async def _maybe_apply_prometheus_revision(
             revision_summary=revision_summary,
         )
         api_logger.warning(
-            "prometheus_revision_failed request_id=%s error=%s",
+            "prometheus_revision_failed request_id=%s error_type=%s",
             str(request.request_id or ""),
-            revision_summary["error"],
+            type(exc).__name__,
         )
         return None
 
@@ -987,7 +985,6 @@ async def _generate_qa(
             error_code=error_code,
             retryable=False,
             took_ms=took_ms,
-            message=validation_message,
         )
         return error_response(
             request_id=request_id,
@@ -1063,7 +1060,6 @@ async def _generate_qa(
             error_code="INDEX_NOT_READY",
             retryable=True,
             took_ms=took_ms,
-            message=str(e),
         )
         return error_response(
             request_id=request_id,
@@ -1081,7 +1077,6 @@ async def _generate_qa(
             error_code="INTERNAL_SERVER_ERROR",
             retryable=False,
             took_ms=took_ms,
-            message=str(e),
         )
         return error_response(
             request_id=request_id,
@@ -1124,7 +1119,6 @@ async def _generate_qa(
                 error_code="BAD_REQUEST",
                 retryable=False,
                 took_ms=took_ms,
-                message="QA 컨텍스트를 구성할 수 없습니다. search_results 형식을 확인해주세요.",
             )
             return error_response(
                 request_id=request_id,
@@ -1242,7 +1236,6 @@ async def _generate_qa(
             error_code=error_code,
             retryable=retryable,
             took_ms=took_ms,
-            message=message,
         )
 
         return error_response(
@@ -1261,7 +1254,6 @@ async def _generate_qa(
             error_code="INTERNAL_SERVER_ERROR",
             retryable=False,
             took_ms=took_ms,
-            message=str(e),
         )
         return error_response(
             request_id=request_id,
@@ -1323,7 +1315,6 @@ async def _generate_qa(
             error_code="PARSE_SCHEMA_MISMATCH",
             retryable=False,
             took_ms=took_ms,
-            message="생성 응답 검증에 실패했습니다.",
         )
         return error_response(
             request_id=request_id,
@@ -1529,6 +1520,10 @@ def _response_payload(result: QAResponse | JSONResponse) -> tuple[str, dict]:
 async def generate_qa_stream(request: QARequest) -> StreamingResponse:
     """QA 진행 단계를 SSE로 전달하고 기존 QA 응답을 done 이벤트로 반환한다."""
 
+    request = request.model_copy(update={
+        "request_id": str(request.request_id or "").strip() or make_request_id(),
+    })
+
     async def event_stream():
         queue: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
 
@@ -1553,10 +1548,11 @@ async def generate_qa_stream(request: QARequest) -> StreamingResponse:
                 )
                 await queue.put(_response_payload(result))
             except Exception as exc:
-                api_logger.exception(
-                    "qa_stream_unhandled_error endpoint=%s message=%s",
+                api_logger.error(
+                    "qa_stream_unhandled_error endpoint=%s request_id=%s error_type=%s",
                     "/api/v1/qa/stream",
-                    exc,
+                    str(request.request_id or "").strip(),
+                    type(exc).__name__,
                 )
                 await queue.put(
                     (

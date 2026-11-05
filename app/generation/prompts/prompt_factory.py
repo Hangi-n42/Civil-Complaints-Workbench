@@ -713,8 +713,8 @@ class PromptFactory:
 
         derived_trace.setdefault("chroma_db_path", str(getattr(settings, "CHROMA_DB_PATH", "")))
         pipeline_logger.info(
-            "autoretrieve start: derived_query=%s mode=%s",
-            str(derived_trace.get("derived_query") or query),
+            "autoretrieve start: derived_query_length=%s mode=%s",
+            len(str(derived_trace.get("derived_query") or query)),
             str(derived_trace.get("prompt_mode") or "default"),
         )
 
@@ -770,9 +770,9 @@ class PromptFactory:
         )
 
         pipeline_logger.info(
-            "autoretrieve search_done: derived_query=%s search_query=%s context_count=%s collection=%s top_k=%s",
-            str(derived_trace.get("derived_query") or ""),
-            str(derived_trace.get("search_query") or ""),
+            "autoretrieve search_done: derived_query_length=%s search_query_length=%s context_count=%s collection=%s top_k=%s",
+            len(str(derived_trace.get("derived_query") or "")),
+            len(str(derived_trace.get("search_query") or "")),
             str(len(raw_context) if isinstance(raw_context, list) else 0),
             str(collection_name),
             str(effective_top_k),

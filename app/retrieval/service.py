@@ -1063,7 +1063,7 @@ class RetrievalService:
             검색 결과 리스트
         """
         try:
-            self.logger.info(f"검색 시작: query='{query}', top_k={top_k}")
+            self.logger.info("검색 시작: query_length=%s top_k=%s", len(query), top_k)
 
             collection_key = collection_name or self.default_collection_name
             store = self._get_vectorstore()
@@ -1110,7 +1110,7 @@ class RetrievalService:
                             fanout=settings.HYBRID_FANOUT,
                         )
                     except Exception as exc:  # 안전: Hybrid 실패 시 Dense로 폴백
-                        self.logger.warning(f"Hybrid 검색 실패, Dense 폴백: {exc}")
+                        self.logger.warning("Hybrid 검색 실패, Dense 폴백: error_type=%s", type(exc).__name__)
                         return dense_results[:retrieve_k]
                 return dense_results[:retrieve_k]
 
@@ -1201,7 +1201,7 @@ class RetrievalService:
             return results
 
         except Exception as e:
-            self.logger.error(f"검색 실패: {str(e)}")
+            self.logger.error("검색 실패: error_type=%s", type(e).__name__)
             raise RetrievalError(f"검색 실패: {str(e)}") from e
 
     @staticmethod
