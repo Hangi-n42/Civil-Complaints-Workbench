@@ -84,7 +84,9 @@ class RetrievalService:
                         for index, record in enumerate(sample_records)
                         if isinstance(record, dict)
                     ]
-                    store.upsert_records(collection_key, normalized)
+                    result = store.upsert_records(collection_key, normalized)
+                    if result.get("indexed_count") and self._hybrid is not None:
+                        self._hybrid.invalidate(collection_key)
                 self.logger.info(f"샘플 인덱스 로드 완료: {len(sample_records)}개 레코드")
         except Exception as e:
             self.logger.warning(f"샘플 인덱스 로드 실패: {str(e)}")
@@ -594,9 +596,10 @@ class RetrievalService:
         collection_key = collection_name or self.default_collection_name
         if rebuild:
             result = store.replace_records(collection_key, safe_normalized_documents)
-            self._hybrid = None
         else:
             result = store.upsert_records(collection_key, safe_normalized_documents)
+        if result.get("indexed_count") and self._hybrid is not None:
+            self._hybrid.invalidate(collection_key)
         return {
             "indexed_count": int(result.get("indexed_count", 0)),
             "chunk_count": int(result.get("chunk_count", 0)),
@@ -1051,7 +1054,8 @@ class RetrievalService:
             result = self._get_vectorstore().publish_collection(
                 collection_name, staged_collection_name, expected_count=expected_count,
             )
-            self._hybrid = None
+            if self._hybrid is not None:
+                self._hybrid.invalidate(collection_name)
             return {**result, "index_name": collection_name, "rebuild": True}
         except Exception as exc:
             raise RetrievalError(f"인덱스 발행 실패: {exc}") from exc

@@ -86,14 +86,24 @@ class HybridRetriever:
         self._store = store
         self.rrf_k = rrf_k
         self._coll: str | None = None
+        self._collection_id: Any = None
         self._bm25: InvertedBM25 | None = None
         self._case_ids: list[str] = []
         self._payload: dict[str, tuple[str, dict]] = {}
 
+    def invalidate(self, collection_name: str) -> None:
+        """같은 서비스에서 저장이 끝난 컬렉션의 캐시만 비운다."""
+        if self._coll == collection_name:
+            self._bm25 = None
+            self._case_ids = []
+            self._payload = {}
+            self._coll = None
+
     def _ensure_index(self, collection_name: str) -> None:
-        if self._bm25 is not None and self._coll == collection_name:
-            return
         col = self._store._get_collection(collection_name)
+        collection_id = getattr(col, "id", None)
+        if self._bm25 is not None and self._coll == collection_name and self._collection_id == collection_id:
+            return
         got = col.get(include=["documents", "metadatas"])
         ids, docs, metas = got.get("ids", []), got.get("documents", []), got.get("metadatas", [])
         case_ids, texts, payload, seen = [], [], {}, set()
@@ -110,6 +120,7 @@ class HybridRetriever:
         self._case_ids = case_ids
         self._payload = payload
         self._coll = collection_name
+        self._collection_id = collection_id
         logger.info(f"[Hybrid] BM25 인덱스 빌드: {collection_name} ({len(case_ids)} case)")
 
     def _result_dict(self, case_id: str, score: float, rank: int) -> dict[str, Any]:
