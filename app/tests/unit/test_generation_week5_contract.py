@@ -265,7 +265,7 @@ def _routing_trace(
 
 
 def test_qa_requires_routing_hint(monkeypatch):
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -283,7 +283,7 @@ def test_qa_requires_routing_hint(monkeypatch):
 
 
 def test_qa_rejects_inconsistent_strategy_and_route_key(monkeypatch):
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -306,7 +306,7 @@ def test_qa_rejects_inconsistent_strategy_and_route_key(monkeypatch):
 
 
 def test_qa_rejects_routing_trace_hint_mismatch(monkeypatch):
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -331,7 +331,7 @@ def test_qa_rejects_routing_trace_hint_mismatch(monkeypatch):
 
 
 def test_qa_rejects_malformed_route_key(monkeypatch):
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -384,7 +384,7 @@ def test_qa_week5_response_skeleton(monkeypatch):
         lambda: _StubCitationMapper(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -507,7 +507,7 @@ def test_qa_preserves_search_routing_trace_request_segments(monkeypatch):
         lambda: _StubCitationMapper(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -573,7 +573,7 @@ def test_qa_rebuilds_segment_evidence_map_and_segment_answers(monkeypatch):
         lambda: _StubCitationMapper(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -639,7 +639,7 @@ def test_qa_internal_search_disables_grounding_filter(monkeypatch):
         lambda: _StubCitationMapper(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -693,7 +693,7 @@ def test_qa_internal_search_passes_canonical_request_segments(monkeypatch):
         lambda: _StubCitationMapper(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -749,7 +749,7 @@ def test_qa_reused_search_results_are_not_grounding_filtered_before_generation(m
         lambda: _StubCitationMapper(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -805,7 +805,7 @@ def test_qa_reused_search_results_do_not_empty_out_from_grounding_filter(monkeyp
         lambda: _StubCitationMapper(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -881,7 +881,7 @@ def test_qa_low_evidence_continues_generation_and_reports_counts(monkeypatch):
         lambda: _StubCitationMapper(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -924,7 +924,7 @@ def test_qa_no_similar_case_fallback_returns_success_without_citations(monkeypat
         lambda: _FailIfCalledGenerationService(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -992,7 +992,7 @@ def test_qa_marks_api_fallback_when_generation_answer_is_empty(monkeypatch):
         lambda: _StubCitationMapper(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -1074,7 +1074,7 @@ def test_qa_runs_prometheus_feedback_and_revises_low_score_answer(monkeypatch, f
         lambda: _StubCitationMapper(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -1162,7 +1162,7 @@ def test_qa_passes_be1_query_signals_to_retrieval_and_generation(monkeypatch):
         lambda: _StubCitationMapper(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={
@@ -1229,7 +1229,7 @@ def test_qa_returns_response_schema_mismatch_when_unified_payload_is_incomplete(
         },
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/qa",
         json={

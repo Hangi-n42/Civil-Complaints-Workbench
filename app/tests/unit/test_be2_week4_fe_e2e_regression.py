@@ -71,7 +71,7 @@ def test_be2_fe_search_to_qa_context_flow(monkeypatch):
         lambda: _FeFlowStubRetrievalService(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/search",
         json={
@@ -116,7 +116,7 @@ def test_be2_fe_search_response_fallbacks_are_stable(monkeypatch):
         lambda: _FallbackStubRetrievalService(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/search",
         json={

@@ -19,6 +19,6 @@ if __name__ == "__main__":
     streamlit_app = project_root / "app" / "ui" / "Home.py"
     
     subprocess.run(
-        [sys.executable, "-m", "streamlit", "run", str(streamlit_app)],
+        [sys.executable, "-m", "streamlit", "run", str(streamlit_app), "--server.address", "127.0.0.1"],
         cwd=str(project_root),
     )

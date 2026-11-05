@@ -6,7 +6,7 @@ from app.api.main import app
 
 
 def test_ui_cases_return_pending_demo_complaints_without_answers():
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.get("/api/v1/ui/cases")
 
     assert response.status_code == 200

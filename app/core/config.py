@@ -8,6 +8,8 @@ import os
 from typing import Optional
 from pathlib import Path
 
+from app.core.local_access import require_loopback_host
+
 # 기본 경로
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
@@ -31,7 +33,7 @@ class Settings:
     API_TITLE: str = "AI Civil Affairs System API"
     API_VERSION: str = "0.1.0"
     API_DESCRIPTION: str = "온디바이스 AI 기반 민원 데이터 심층 분석 및 검색 시스템"
-    API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
+    API_HOST: str = require_loopback_host(os.getenv("API_HOST", "127.0.0.1"))
     API_PORT: int = int(os.getenv("API_PORT", 8000))
     DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
 

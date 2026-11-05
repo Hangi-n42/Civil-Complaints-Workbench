@@ -176,7 +176,7 @@ def test_collector_status_api_returns_checkpoint_without_raw_pii() -> None:
     scheduler.run_once()
     set_complaint_intelligence_service(service)
     set_complaint_intelligence_scheduler(scheduler)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
 
     response = client.get("/complaint-intelligence/collector/status")
 
