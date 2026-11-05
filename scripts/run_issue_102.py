@@ -26,6 +26,8 @@ from typing import Any, Dict, List, Tuple, Optional
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 from app.core.config import settings
 
 
@@ -125,7 +127,7 @@ def _run_filter_validation(
     client = chromadb.PersistentClient(path=str(persist_path))
 
     try:
-        collection = client.get_collection(name=collection_name)
+        collection = get_active_collection(client, collection_name)
     except Exception as exc:
         raise RuntimeError(f"Collection not found: {collection_name}") from exc
 

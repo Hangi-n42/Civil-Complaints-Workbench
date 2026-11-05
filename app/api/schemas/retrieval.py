@@ -126,6 +126,15 @@ class IndexRecordResult(BaseModel):
     chunk_ids: List[str]
 
 
+class PublishIndexRequest(BaseModel):
+    """모든 배치가 저장된 임시 인덱스를 사용 대상으로 전환한다."""
+
+    request_id: Optional[str] = None
+    collection_name: str = settings.DEFAULT_CHROMA_COLLECTION
+    staged_collection_name: str = Field(min_length=3)
+    expected_count: Optional[int] = Field(default=None, ge=1)
+
+
 class IndexResponseData(BaseModel):
     """인덱싱 응답 데이터"""
 

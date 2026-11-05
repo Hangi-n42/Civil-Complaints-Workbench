@@ -17,6 +17,7 @@ from fastapi import APIRouter, Query
 from app.api.error_utils import error_response, make_request_id, now_iso
 from app.core.config import settings
 from app.core.logging import api_logger
+from app.retrieval.vectorstores.collection_alias import resolve_collection_name
 from app.structuring.civil_category import classify_civil_category
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 _UNCLASSIFIED = "미분류"
 # (primary, year) 인덱스 캐시 — 정적 아카이브라 한 번만 계산한다.
 _doc_index: Optional[List[Dict[str, Optional[str]]]] = None
+_doc_index_source: Optional[tuple[str, str]] = None
 
 
 def _split_pipe(value: Any) -> List[str]:
@@ -166,17 +168,20 @@ def _build_index_from_metadatas(metadatas: List[Dict[str, Any]]) -> List[Dict[st
 
 
 def _build_index() -> List[Dict[str, Optional[str]]]:
-    global _doc_index
-    if _doc_index is not None:
+    global _doc_index, _doc_index_source
+    physical_name = resolve_collection_name(settings.CHROMA_DB_PATH, settings.DEFAULT_CHROMA_COLLECTION)
+    source = (str(settings.CHROMA_DB_PATH), physical_name)
+    if _doc_index is not None and _doc_index_source == source:
         return _doc_index
 
     import chromadb
 
     client = chromadb.PersistentClient(path=settings.CHROMA_DB_PATH)
-    collection = client.get_collection(settings.DEFAULT_CHROMA_COLLECTION)
+    collection = client.get_collection(physical_name)
     result = collection.get(include=["metadatas"])
 
     _doc_index = _build_index_from_metadatas(result.get("metadatas") or [])
+    _doc_index_source = source
     return _doc_index
 
 

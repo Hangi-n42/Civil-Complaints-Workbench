@@ -20,9 +20,12 @@ import sys
 import time
 from pathlib import Path
 from typing import Any, Dict
+from uuid import uuid4
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+from app.retrieval.vectorstores.collection_alias import get_active_collection, resolve_collection_name
 
 from app.core.config import settings
 from app.core.logging import pipeline_logger
@@ -35,14 +38,18 @@ from scripts.build_index import _build_api_case_record
 def _existing_case_ids(collection_name: str) -> set[str]:
     """대상 컬렉션에 이미 색인된 case_id 집합 (resume 용)."""
     import chromadb
-    client = chromadb.PersistentClient(path=str(PROJECT_ROOT / "data" / "chroma_db"))
-    if collection_name not in [c.name for c in client.list_collections()]:
+    client = chromadb.PersistentClient(path=str(settings.CHROMA_DB_PATH))
+    physical_name = resolve_collection_name(client.get_settings().persist_directory, collection_name)
+    if physical_name not in [c.name for c in client.list_collections()]:
         return set()
-    metas = client.get_collection(collection_name).get(include=["metadatas"])["metadatas"]
+    metas = get_active_collection(client, collection_name).get(include=["metadatas"])["metadatas"]
     return {str(m.get("case_id") or "") for m in metas}
 
 
-def _read_normalized_items(json_files: list[Path], ingestion_svc, exclude_case_ids: set[str] | None = None) -> list[dict[str, Any]]:
+def _read_normalized_items(
+    json_files: list[Path], ingestion_svc, exclude_case_ids: set[str] | None = None,
+    *, fail_on_error: bool = False,
+) -> list[dict[str, Any]]:
     exclude = exclude_case_ids or set()
     skipped = 0
     items: list[dict[str, Any]] = []
@@ -73,6 +80,8 @@ def _read_normalized_items(json_files: list[Path], ingestion_svc, exclude_case_i
                     })
         except Exception as e:  # noqa: BLE001
             pipeline_logger.error(f"파일 처리 오류 ({file_path}): {e}")
+            if fail_on_error:
+                raise
     if exclude:
         pipeline_logger.info(f"resume: 이미 색인된 {skipped}건 건너뜀")
     return items
@@ -115,7 +124,9 @@ async def main(
     )
 
     normalized_list = await ingestion_svc.process(
-        _read_normalized_items(json_files, ingestion_svc, exclude_case_ids=exclude_case_ids),
+        _read_normalized_items(
+            json_files, ingestion_svc, exclude_case_ids=exclude_case_ids, fail_on_error=rebuild,
+        ),
         pii_policy=effective_pii_policy,
     )
     total_docs = len(normalized_list)
@@ -124,20 +135,22 @@ async def main(
     batch: list[Dict[str, Any]] = []
     indexed = 0
     failed = 0
-    first_batch = True
+    write_collection = f"ccw-direct-{uuid4().hex}" if rebuild else collection_name
     t0 = time.time()
 
     async def flush() -> None:
-        nonlocal batch, indexed, first_batch
+        nonlocal batch, indexed
         if not batch:
             return
-        await retrieval_svc.index_documents(
+        result = await retrieval_svc.index_documents(
             documents=batch,
-            rebuild=(first_batch and rebuild),
-            collection_name=collection_name,
+            rebuild=False,
+            collection_name=write_collection,
         )
-        indexed += len(batch)
-        first_batch = False
+        written = result["indexed_count"]
+        if rebuild and written != len(batch):
+            raise RuntimeError(f"배치 일부가 저장되지 않아 기존 컬렉션을 유지합니다. 임시 컬렉션: {write_collection}")
+        indexed += written
         elapsed = time.time() - t0
         rate = indexed / elapsed if elapsed else 0.0
         eta = (total_docs - indexed) / rate / 60 if rate else 0.0
@@ -156,6 +169,11 @@ async def main(
         if len(batch) >= batch_size:
             await flush()
     await flush()
+
+    if rebuild:
+        if failed or not indexed:
+            raise RuntimeError(f"재구축 미완료로 기존 컬렉션을 유지합니다. 임시 컬렉션: {write_collection}")
+        await retrieval_svc.publish_index(collection_name, write_collection, expected_count=indexed)
 
     logger.info(f"재색인 완료: 색인 {indexed}건, 실패 {failed}건 → '{collection_name}' ({time.time()-t0:.0f}s)")
     print(f"[done] indexed={indexed} failed={failed} collection={collection_name}", flush=True)

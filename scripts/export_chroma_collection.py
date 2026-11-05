@@ -11,6 +11,12 @@ from typing import Any
 import chromadb
 import numpy as np
 
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="ChromaDB collection export")
@@ -24,7 +30,7 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     args = _parse_args()
     client = chromadb.PersistentClient(path=args.persist_dir)
-    collection = client.get_collection(args.collection)
+    collection = get_active_collection(client, args.collection)
     total = int(collection.count())
 
     ids: list[str] = []

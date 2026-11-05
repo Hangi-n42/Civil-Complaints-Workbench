@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 from app.core.logging import pipeline_logger
-from app.core.exceptions import RetrievalError
+from app.core.exceptions import IndexingInputError, RetrievalError
 from app.core.config import settings
 from app.core.title_builder import build_case_title
 from app.retrieval.entity_labels import ALLOWED_ENTITY_LABELS
@@ -584,12 +584,19 @@ class RetrievalService:
         ]
         skipped_empty_count = len(normalized_documents) - len(safe_normalized_documents)
 
+        if rebuild and not safe_normalized_documents:
+            raise IndexingInputError(
+                "색인 가능한 문서가 없습니다. 기존 컬렉션을 유지합니다. "
+                f"(개인정보 제외={skipped_pii_count}, 빈 텍스트 제외={skipped_empty_count})"
+            )
+
         store = self._get_vectorstore()
         collection_key = collection_name or self.default_collection_name
         if rebuild:
-            store.reset_collection(collection_key)
-
-        result = store.upsert_records(collection_key, safe_normalized_documents)
+            result = store.replace_records(collection_key, safe_normalized_documents)
+            self._hybrid = None
+        else:
+            result = store.upsert_records(collection_key, safe_normalized_documents)
         return {
             "indexed_count": int(result.get("indexed_count", 0)),
             "chunk_count": int(result.get("chunk_count", 0)),
@@ -1030,9 +1037,24 @@ class RetrievalService:
                     collection_name,
                 )
             return result
+        except IndexingInputError:
+            raise
         except Exception as e:
             self.logger.error(f"인덱싱 실패: {str(e)}")
             raise RetrievalError(f"인덱싱 실패: {str(e)}") from e
+
+    async def publish_index(
+        self, collection_name: str, staged_collection_name: str, expected_count: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """여러 REST 배치의 저장이 모두 끝난 임시 인덱스를 발행한다."""
+        try:
+            result = self._get_vectorstore().publish_collection(
+                collection_name, staged_collection_name, expected_count=expected_count,
+            )
+            self._hybrid = None
+            return {**result, "index_name": collection_name, "rebuild": True}
+        except Exception as exc:
+            raise RetrievalError(f"인덱스 발행 실패: {exc}") from exc
 
     async def search(
         self,

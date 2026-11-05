@@ -1,8 +1,15 @@
 """STEP3 준비: judge 입력 생성 — pool의 각 (쿼리,후보)쌍에 후보 본문 첨부. exaone 전수 채점용."""
 import json, os, chromadb
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-col = chromadb.PersistentClient(path=os.path.join(ROOT, 'data/chroma_db')).get_collection('civil_cases_v3')
+col = get_active_collection(chromadb.PersistentClient(path=os.path.join(ROOT, 'data/chroma_db')), 'civil_cases_v3')
 data = col.get(include=['documents', 'metadatas'])
 text_by_case = {}
 for sid, doc, meta in zip(data['ids'], data['documents'], data['metadatas']):

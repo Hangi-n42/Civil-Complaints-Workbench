@@ -26,6 +26,8 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 from app.core.config import settings
 from app.evaluation.metrics import RunRecord, evaluate_run
 from app.evaluation.datasets import QrelRecord
@@ -247,7 +249,7 @@ def run_dense(queries: list[dict], collection_name: str = "civil_cases_v1") -> d
 
     print("[Dense] ChromaDB 연결 중...")
     client = chromadb.PersistentClient(path=settings.CHROMA_DB_PATH)
-    col = client.get_collection(collection_name)
+    col = get_active_collection(client, collection_name)
 
     device = _pick_embedding_device()
     print(f"[Dense] BGE-m3 임베딩 모델 로딩 ({device})...")

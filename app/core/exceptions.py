@@ -27,6 +27,10 @@ class RetrievalError(AISystemException):
     pass
 
 
+class IndexingInputError(RetrievalError):
+    """기존 인덱스를 유지해야 하는 잘못된 재구축 입력."""
+
+
 class NoEvidenceError(RetrievalError):
     """검색 근거(컨텍스트)가 0개일 때의 명시적 오류.
 

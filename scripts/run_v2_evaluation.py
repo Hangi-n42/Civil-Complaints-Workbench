@@ -16,6 +16,8 @@ from typing import Any, Dict, List, Tuple, Set
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 from app.core.config import settings
 from app.evaluation.datasets import QrelRecord
 from app.evaluation.metrics import RunRecord, evaluate_run
@@ -136,7 +138,7 @@ def _load_v2_set(v2_dir: Path) -> List[Tuple[str, str, Dict[str, int]]]:
 def _initialize_chroma_client(persist_dir: str, collection_name: str):
     import chromadb
     client = chromadb.PersistentClient(path=persist_dir)
-    collection = client.get_collection(name=collection_name)
+    collection = get_active_collection(client, collection_name)
     return client, collection
 
 

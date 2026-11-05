@@ -24,6 +24,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.ingestion.service import get_ingestion_service
+from app.retrieval.vectorstores.collection_alias import resolve_collection_name
 
 
 DEFAULT_OUTPUT_DIR = Path("data") / "append_inputs" / "civil_cases_v3_policy_qna"
@@ -87,7 +88,7 @@ def _read_existing_case_ids(chroma_sqlite: Path, collection_name: str) -> set[st
     con = sqlite3.connect(str(chroma_sqlite))
     try:
         cur = con.cursor()
-        cur.execute("select id from collections where name = ?", (collection_name,))
+        cur.execute("select id from collections where name = ?", (resolve_collection_name(chroma_sqlite.parent, collection_name),))
         row = cur.fetchone()
         if not row:
             return set()

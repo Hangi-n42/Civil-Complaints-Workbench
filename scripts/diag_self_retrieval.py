@@ -4,8 +4,15 @@ import json, os, statistics, chromadb
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-col = chromadb.PersistentClient(path=os.path.join(ROOT, 'data/chroma_db')).get_collection('civil_cases_v3')
+col = get_active_collection(chromadb.PersistentClient(path=os.path.join(ROOT, 'data/chroma_db')), 'civil_cases_v3')
 got = col.get(include=['documents', 'metadatas'])
 doc = {}
 for sid, d, meta in zip(got['ids'], got['documents'], got['metadatas']):

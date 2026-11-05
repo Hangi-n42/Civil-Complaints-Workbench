@@ -28,6 +28,8 @@ import ollama
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 from app.core.config import settings
 from app.ingestion.service import IngestionService
 from app.structuring.service import StructuringService
@@ -233,7 +235,7 @@ def load_chroma_corpus() -> tuple[list[str], list[str], list[str], list[dict], "
 
     print("[코퍼스] ChromaDB 로딩 중...")
     client = chromadb.PersistentClient(path=settings.CHROMA_DB_PATH)
-    col = client.get_collection("civil_cases_v1")
+    col = get_active_collection(client, "civil_cases_v1")
     total = col.count()
     print(f"  총 청크: {total}")
 

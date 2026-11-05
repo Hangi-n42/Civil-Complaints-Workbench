@@ -13,6 +13,12 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.retrieval.vectorstores.collection_alias import get_active_collection, resolve_collection_name
+
 
 DEFAULT_CHROMA_SQLITE = Path("data") / "chroma_db" / "chroma.sqlite3"
 DEFAULT_CHROMA_DIR = Path("data") / "chroma_db"
@@ -64,7 +70,7 @@ def analyze_duplicates(
     con = sqlite3.connect(sqlite_path)
     try:
         cur = con.cursor()
-        segment_ids = _get_collection_segments(cur, collection_name)
+        segment_ids = _get_collection_segments(cur, resolve_collection_name(sqlite_path.parent, collection_name))
         if not segment_ids:
             raise RuntimeError(f"컬렉션 segment를 찾지 못했습니다: {collection_name}")
 
@@ -166,7 +172,7 @@ def main() -> int:
             import chromadb
 
             client = chromadb.PersistentClient(path=str(args.chroma_dir))
-            collection = client.get_collection(args.collection_name)
+            collection = get_active_collection(client, args.collection_name)
             collection.delete(ids=stale_ids)
         report["deleted_count"] = len(stale_ids)
     else:

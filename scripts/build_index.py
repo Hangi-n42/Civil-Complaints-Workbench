@@ -16,6 +16,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
+from uuid import uuid4
 
 import httpx
 
@@ -24,6 +25,7 @@ sys.path.insert(0, str(project_root))
 
 from app.core.config import settings
 from app.core.logging import pipeline_logger
+from app.retrieval.vectorstores.collection_alias import resolve_collection_name
 from app.ingestion.service import get_ingestion_service
 from app.structuring.service import get_structuring_service
 
@@ -54,7 +56,8 @@ def _read_existing_case_ids(
     con = sqlite3.connect(str(db_path))
     try:
         cur = con.cursor()
-        cur.execute("select id from collections where name = ?", (collection_name,))
+        physical_name = resolve_collection_name(base_dir, collection_name)
+        cur.execute("select id from collections where name = ?", (physical_name,))
         row = cur.fetchone()
         if not row:
             return set()
@@ -359,7 +362,10 @@ async def _index_via_rest_api(
     index_retries: int = 3,
     index_retry_delay: float = 5.0,
 ) -> None:
+    if rebuild and not cases:
+        raise ValueError("색인 가능한 문서가 없습니다. 기존 컬렉션을 유지합니다.")
     endpoint = f"{api_url.rstrip('/')}/api/v1/index"
+    write_collection = f"rebuild_{uuid4().hex}" if rebuild else collection_name
     effective_batch_size = max(1, int(batch_size))
     total_batches = (len(cases) + effective_batch_size - 1) // effective_batch_size
     total_indexed = 0
@@ -368,13 +374,13 @@ async def _index_via_rest_api(
     async with httpx.AsyncClient(timeout=600.0) as client:
         for batch_number, start_index in enumerate(range(0, len(cases), effective_batch_size), start=1):
             batch = cases[start_index : start_index + effective_batch_size]
-            action = "bulk" if (batch_number == 1 and rebuild) else "incremental"
+            action = "incremental"
             request_id = f"IDX-{datetime.now().strftime('%Y%m%d%H%M%S')}-{batch_number:03d}"
 
             payload = {
                 "request_id": request_id,
                 "action": action,
-                "collection_name": collection_name,
+                "collection_name": write_collection,
                 "cases": batch,
             }
 
@@ -459,6 +465,8 @@ async def _index_via_rest_api(
             data = body.get("data", {}) if isinstance(body.get("data", {}), dict) else {}
             indexed_count = int(data.get("indexed_count", 0))
             failed_count = int(data.get("failed_count", 0))
+            if failed_count or indexed_count != len(batch):
+                raise RuntimeError("BE2 배치 일부가 저장되지 않아 재구축 발행을 중단합니다.")
             total_indexed += indexed_count
             total_failed += failed_count
 
@@ -471,6 +479,9 @@ async def _index_via_rest_api(
                 collection_name,
             )
 
+    if rebuild:
+        await _publish_via_rest_api(api_url, collection_name, write_collection, expected_count=total_indexed)
+
     logger.info(
         "BE2 REST 인덱싱 전체 완료: total_cases=%d indexed=%d failed=%d collection=%s",
         len(cases),
@@ -478,6 +489,20 @@ async def _index_via_rest_api(
         total_failed,
         collection_name,
     )
+
+
+async def _publish_via_rest_api(
+    api_url: str, collection_name: str, staged_collection_name: str, expected_count: int | None = None,
+) -> None:
+    endpoint = f"{api_url.rstrip('/')}/api/v1/index/publish"
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(endpoint, json={
+            "collection_name": collection_name, "staged_collection_name": staged_collection_name,
+            "expected_count": expected_count,
+        })
+        response.raise_for_status()
+        if not response.json().get("success", False):
+            raise RuntimeError("BE2 임시 인덱스 발행에 실패했습니다.")
 
 
 async def _check_be2_health(
@@ -553,7 +578,6 @@ async def main(
     existing_case_ids: set[str] = set()
     skipped_existing_count = 0
     indexed_count = 0
-    first_index_batch = True
     pending_cases: list[Dict[str, Any]] = []
     run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_prefix = f"{_safe_filename_part(collection_name)}_structured_{run_stamp}"
@@ -568,8 +592,12 @@ async def main(
         existing_case_ids = _read_existing_case_ids(collection_name, logger=logger)
         logger.info("resume 모드: 기존 case_id %d건을 스킵 대상으로 로드했습니다.", len(existing_case_ids))
 
+    write_collection = f"rebuild_{uuid4().hex}" if rebuild else collection_name
+    if rebuild:
+        logger.info("재구축 임시 컬렉션: %s, 발행 대상: %s", write_collection, collection_name)
+
     async def flush_pending_cases() -> None:
-        nonlocal pending_cases, first_index_batch, indexed_count
+        nonlocal pending_cases, indexed_count
         if not pending_cases:
             return
 
@@ -577,14 +605,14 @@ async def main(
             await _index_via_rest_api(
                 api_url=api_url,
                 cases=pending_cases,
-                collection_name=collection_name,
+                collection_name=write_collection,
                 batch_size=effective_batch_size,
-                rebuild=(first_index_batch and rebuild),
+                rebuild=False,
                 logger=logger,
                 index_retries=index_retries,
                 index_retry_delay=index_retry_delay,
             )
-        except Exception:
+        except BaseException:
             for case in pending_cases:
                 _append_jsonl(checkpoint_pending_index_path, case)
             logger.error(
@@ -598,7 +626,6 @@ async def main(
             case_id = str(case.get("case_id") or "")
             if case_id:
                 existing_case_ids.add(case_id)
-        first_index_batch = False
         pending_cases = []
 
     await _check_be2_health(
@@ -740,6 +767,13 @@ async def main(
         logger=logger,
     )
 
+    if rebuild:
+        if not indexed_count or any(failure.get("stage") != "pii_review_skip" for failure in structured_failures):
+            raise RuntimeError(
+                f"재구축 미완료로 기존 컬렉션을 유지합니다. 임시 컬렉션: {write_collection}"
+            )
+        await _publish_via_rest_api(api_url, collection_name, write_collection, expected_count=indexed_count)
+
     logger.info(
         "변환/색인 완료: structured=%d indexed=%d failed=%d skipped_existing=%d collection=%s partial=%s failures_partial=%s",
         len(structured_outputs),
@@ -782,7 +816,7 @@ if __name__ == "__main__":
         "--rebuild",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="True(기본값): 1번 배치에서 컬렉션 초기화 후 재빌드. --no-rebuild: 전체 incremental 추가",
+        help="True(기본값): 임시 컬렉션에 전체 배치를 구축한 뒤 발행. --no-rebuild: 기존 컬렉션에 incremental 추가",
     )
     parser.add_argument(
         "--limit",

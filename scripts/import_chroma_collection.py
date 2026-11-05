@@ -5,10 +5,16 @@ from __future__ import annotations
 import argparse
 import gzip
 import pickle
+import sys
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import chromadb
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.retrieval.vectorstores.collection_alias import activate_collection, resolve_collection_name
 
 
 def _parse_args() -> argparse.Namespace:
@@ -49,15 +55,16 @@ def main() -> None:
             f"metadatas={len(metadatas)} embeddings={len(embeddings)}"
         )
 
-    client = chromadb.PersistentClient(path=args.persist_dir)
-    if args.replace:
-        try:
-            client.delete_collection(collection_name)
-        except Exception:
-            pass
+    if args.replace and not ids:
+        raise ValueError("export payload contains no records; existing collection is unchanged")
 
+    client = chromadb.PersistentClient(path=args.persist_dir)
+    physical_name = (
+        f"ccw-import-{uuid4().hex}" if args.replace
+        else resolve_collection_name(args.persist_dir, collection_name)
+    )
     collection = client.get_or_create_collection(
-        name=collection_name,
+        name=physical_name,
         metadata={"hnsw:space": "cosine"},
     )
 
@@ -72,6 +79,11 @@ def main() -> None:
             embeddings=embeddings[start:end].tolist(),
         )
         print(f"[import] {end}/{total}")
+
+    if args.replace:
+        if collection.count() != total:
+            raise ValueError("imported collection count does not match export payload")
+        activate_collection(args.persist_dir, collection_name, physical_name)
 
     print(f"[done] collection={collection_name} count={collection.count()}")
 

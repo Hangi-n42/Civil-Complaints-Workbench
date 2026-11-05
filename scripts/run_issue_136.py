@@ -25,6 +25,8 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 from app.core.config import settings
 
 
@@ -118,7 +120,7 @@ def _initialize_chroma(persist_dir: str, collection_name: str):
     import chromadb
 
     client = chromadb.PersistentClient(path=persist_dir)
-    collection = client.get_collection(name=collection_name)
+    collection = get_active_collection(client, collection_name)
     return client, collection
 
 

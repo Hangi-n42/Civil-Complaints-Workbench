@@ -5,6 +5,8 @@ import asyncio, json, os, sys, chromadb, random
 import httpx
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+
+from app.retrieval.vectorstores.collection_alias import get_active_collection
 from app.core.config import settings
 from app.retrieval.grounding_filter import extract_score, build_prompt
 
@@ -37,7 +39,7 @@ random.seed(42)
 sample = random.sample(rel2_clean, min(150, len(rel2_clean)))
 
 queries = {q['query_id']: q for q in (json.loads(l) for l in open(os.path.join(EVAL, 'queries.jsonl'))) if q.get('source') == 'civil'}
-col = chromadb.PersistentClient(path=os.path.join(ROOT, 'data/chroma_db')).get_collection('civil_cases_v3')
+col = get_active_collection(chromadb.PersistentClient(path=os.path.join(ROOT, 'data/chroma_db')), 'civil_cases_v3')
 got = col.get(include=['documents', 'metadatas'])
 doc, meta = {}, {}
 for sid, d, m in zip(got['ids'], got['documents'], got['metadatas']):

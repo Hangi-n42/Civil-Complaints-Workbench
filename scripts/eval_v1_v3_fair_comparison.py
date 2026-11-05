@@ -30,6 +30,8 @@ import httpx
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 import chromadb
 
 from app.evaluation.datasets import QrelRecord, sha256_file
@@ -62,7 +64,7 @@ def load_case_texts() -> dict[str, str]:
     client = chromadb.PersistentClient(path=str(PROJECT_ROOT / "data" / "chroma_db"))
     texts: dict[str, str] = {}
     for name in ("civil_cases_v1", "civil_cases_v3"):  # v3 를 나중에 덮어써 우선
-        got = client.get_collection(name).get(include=["documents", "metadatas"])
+        got = get_active_collection(client, name).get(include=["documents", "metadatas"])
         for doc, meta in zip(got["documents"], got["metadatas"]):
             cid = str(meta.get("case_id") or "")
             if cid and (doc or "").strip():

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -15,6 +16,7 @@ from fastapi import APIRouter, Query
 
 from app.api.error_utils import error_response, make_request_id, now_iso
 from app.core.config import settings
+from app.retrieval.vectorstores.collection_alias import resolve_collection_name
 
 router = APIRouter(prefix="/api/v1/chroma", tags=["chroma-debug"])
 
@@ -43,7 +45,17 @@ def _sqlite_list_collections(persist_dir: Path) -> List[Dict[str, Any]]:
         cur = con.cursor()
         cur.execute("select name, dimension from collections order by name")
         rows = cur.fetchall()
-        return [{"name": str(name), "dimension": int(dim)} for name, dim in rows]
+        collections = {str(name): {"name": str(name), "dimension": int(dim) if dim is not None else None} for name, dim in rows}
+        for pointer in (persist_dir / "collection_aliases").glob("*.json"):
+            logical_name = json.loads(pointer.read_text(encoding="utf-8"))["logical_name"]
+            physical_name = resolve_collection_name(persist_dir, logical_name)
+            active = collections[physical_name]
+            collections[logical_name] = {
+                "name": logical_name,
+                "dimension": active["dimension"],
+                "active_physical_name": physical_name,
+            }
+        return sorted(collections.values(), key=lambda item: item["name"])
     finally:
         con.close()
 
@@ -58,12 +70,14 @@ def _sqlite_sample_docs(
     con = _sqlite_connect(persist_dir)
     try:
         cur = con.cursor()
-        cur.execute("select id, dimension from collections where name = ?", (collection_name,))
+        physical_name = resolve_collection_name(persist_dir, collection_name)
+        cur.execute("select id, dimension from collections where name = ?", (physical_name,))
         row = cur.fetchone()
         if not row:
             return {"error": f"collections에서 찾지 못했습니다: {collection_name}"}
 
         collection_id, dimension = row
+        dimension = int(dimension) if dimension is not None else None
 
         segment_cols = _sqlite_columns(con, "segments")
         if "collection" in segment_cols:
@@ -82,7 +96,7 @@ def _sqlite_sample_docs(
             return {
                 "collection": collection_name,
                 "collection_id": str(collection_id),
-                "dimension": int(dimension),
+                "dimension": dimension,
                 "rows": [],
             }
 
@@ -97,7 +111,7 @@ def _sqlite_sample_docs(
             return {
                 "collection": collection_name,
                 "collection_id": str(collection_id),
-                "dimension": int(dimension),
+                "dimension": dimension,
                 "rows": [],
             }
 
@@ -145,7 +159,7 @@ def _sqlite_sample_docs(
         return {
             "collection": collection_name,
             "collection_id": str(collection_id),
-            "dimension": int(dimension),
+            "dimension": dimension,
             "sample_size": len(rows),
             "rows": rows,
         }
@@ -192,7 +206,7 @@ async def get_collection_count(collection_name: str) -> Dict[str, Any]:
         import chromadb  # type: ignore
 
         client = chromadb.PersistentClient(path=str(persist_dir))
-        collection = client.get_collection(collection_name)
+        collection = client.get_collection(resolve_collection_name(persist_dir, collection_name))
         count = int(collection.count())
     except Exception as exc:
         if _looks_like_hnsw_load_error(exc):
@@ -242,7 +256,7 @@ async def sample_collection(
         import chromadb  # type: ignore
 
         client = chromadb.PersistentClient(path=str(persist_dir))
-        collection = client.get_collection(collection_name)
+        collection = client.get_collection(resolve_collection_name(persist_dir, collection_name))
         result = collection.get(limit=int(limit), include=["documents", "metadatas"])
         ids = result.get("ids") or []
         docs = result.get("documents") or []
