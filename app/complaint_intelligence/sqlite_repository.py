@@ -296,9 +296,15 @@ class SQLiteComplaintIntelligenceRepository(ComplaintIntelligenceRepository):
         with self._lock, self._connect() as connection:
             connection.executemany(
                 """
-                INSERT OR REPLACE INTO ci_duplicate_groups (
+                INSERT INTO ci_duplicate_groups (
                     merge_id, status, confidence, updated_at, payload_json
                 ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(merge_id) DO UPDATE SET
+                    status = excluded.status,
+                    confidence = excluded.confidence,
+                    updated_at = excluded.updated_at,
+                    payload_json = excluded.payload_json
+                WHERE ci_duplicate_groups.status = 'candidate' OR excluded.status != 'candidate'
                 """,
                 rows,
             )

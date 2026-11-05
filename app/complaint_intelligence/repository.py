@@ -133,7 +133,7 @@ class ComplaintIntelligenceRepository(ABC):
 
     @abstractmethod
     def save_duplicate_groups(self, groups: list[DuplicateMergeRecord]) -> None:
-        """DuplicateMergeRecord 최신 상태를 저장한다."""
+        """후보를 갱신하되 기존 담당자 판단은 candidate로 덮어쓰지 않는다."""
 
     @abstractmethod
     def list_duplicate_groups(self, status: DuplicateMergeStatus | None = None) -> list[DuplicateMergeRecord]:
@@ -298,6 +298,9 @@ class InMemoryComplaintIntelligenceRepository(ComplaintIntelligenceRepository):
     def save_duplicate_groups(self, groups: list[DuplicateMergeRecord]) -> None:
         with self._lock:
             for group in groups:
+                existing = self._duplicate_groups.get(group.merge_id)
+                if group.status == "candidate" and existing and existing.status != "candidate":
+                    continue
                 self._duplicate_groups[group.merge_id] = group
 
     def list_duplicate_groups(self, status: DuplicateMergeStatus | None = None) -> list[DuplicateMergeRecord]:

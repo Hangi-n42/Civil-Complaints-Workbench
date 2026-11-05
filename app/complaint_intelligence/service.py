@@ -75,6 +75,14 @@ class ComplaintIntelligenceService:
         self.repository = repository or _build_repository(self.config)
         self._lock = RLock()
 
+    def save_events(self, events: list[ComplaintIntelligenceEvent]) -> None:
+        """검토된 중복 그룹의 근거를 보호하면서 수집 이벤트를 저장한다."""
+
+        safe_events = _safe_events(events)
+        with self._lock:
+            self._check_reviewed_duplicate_inputs(safe_events)
+            self.repository.save_events(safe_events)
+
     def run_analysis(
         self,
         events: list[ComplaintIntelligenceEvent],
@@ -103,7 +111,7 @@ class ComplaintIntelligenceService:
                 metadata={"analysis_type": "issue_and_public_insight", **(metadata or {})},
             )
             try:
-                self.repository.save_events(safe_events)
+                self.save_events(safe_events)
                 active_alerts = self.repository.list_issue_alerts()
                 alerts = self.issue_engine.detect(safe_events, active_alerts=active_alerts)
                 public_insights = self.public_insight_engine.generate(safe_events, alerts, now=resolved_as_of)
@@ -209,13 +217,14 @@ class ComplaintIntelligenceService:
                 metadata={"analysis_type": "duplicate_merge"},
             )
             try:
-                self.repository.save_events(safe_events)
+                self.save_events(safe_events)
                 groups = self.duplicate_merge_service.run_analysis(
                     safe_events,
                     issue_alerts=self.repository.list_issue_alerts(),
                     public_insights=self.repository.list_public_insights(),
                 )
                 self.repository.save_duplicate_groups(groups)
+                groups = [self.repository.get_duplicate_group(group.merge_id) for group in groups]
                 self.repository.complete_analysis_run(
                     run_id,
                     status="completed",
@@ -458,6 +467,40 @@ class ComplaintIntelligenceService:
             )
             self.repository.update_duplicate_group(updated)
             return updated
+
+    def _check_reviewed_duplicate_inputs(self, events: list[ComplaintIntelligenceEvent]) -> None:
+        # 검토된 근거를 바꾸는 저장은 별도 재검토가 필요하며 기존 판단/이벤트를 보존한다.
+        reviewed = [group for group in self.repository.list_duplicate_groups() if group.status != "candidate"]
+        member_ids = {case_id for group in reviewed for case_id in group.member_complaint_ids}
+        incoming = {event.id: event for event in events if event.id in member_ids}
+        stored = {event.id: event for event in self.repository.get_events(list(incoming))} if incoming else {}
+        changed = {
+            case_id for case_id, event in incoming.items()
+            if case_id not in stored
+            or _duplicate_review_inputs(event) != _duplicate_review_inputs(stored[case_id])
+        }
+        if changed:
+            raise DuplicateMergeConflict(
+                "DUPLICATE_GROUP_REVIEW_REQUIRED",
+                "검토된 중복 그룹의 입력 변경은 별도 재검토가 필요합니다. 기존 판단과 근거는 유지됩니다.",
+                {
+                    "merge_ids": sorted(group.merge_id for group in reviewed if changed.intersection(group.member_complaint_ids)),
+                    "changed_case_ids": sorted(changed),
+                },
+            )
+
+
+def _duplicate_review_inputs(event: ComplaintIntelligenceEvent) -> dict[str, Any]:
+    inputs = event.model_dump(include={
+        "received_at", "masked_text", "region", "predicted_department", "final_department",
+        "request_segments", "entity_texts", "responsible_unit", "civil_category",
+        "pii_status", "pii_detected", "pii_labels",
+    })
+    inputs["structured_elements"] = {
+        field: element.text for field in ("observation", "result", "request", "context")
+        if (element := getattr(event.structured_elements, field)) is not None and element.text
+    }
+    return inputs
 
 
 def _build_repository(config: ComplaintIntelligenceConfig) -> ComplaintIntelligenceRepository:
