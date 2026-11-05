@@ -65,10 +65,11 @@ class Settings:
     GROUNDING_FILTER_MAX_CONCURRENCY: int = int(os.getenv("GROUNDING_FILTER_MAX_CONCURRENCY", 5))
 
     # 데이터 경로
-    RAW_DATA_PATH: str = str(DATA_DIR / "raw")
+    RAW_DATA_PATH: str = os.getenv("RAW_DATA_PATH", str(DATA_DIR / "raw"))
     INTERIM_DATA_PATH: str = str(DATA_DIR / "interim")
-    PROCESSED_DATA_PATH: str = str(DATA_DIR / "processed")
-    SAMPLES_DATA_PATH: str = str(DATA_DIR / "samples")
+    PROCESSED_DATA_PATH: str = os.getenv("PROCESSED_DATA_PATH", str(DATA_DIR / "processed"))
+    SAMPLES_DATA_PATH: str = os.getenv("SAMPLES_DATA_PATH", str(DATA_DIR / "samples"))
+    UI_CASES_DATA_PATH: str = os.getenv("UI_CASES_DATA_PATH", str(DATA_DIR / "demo" / "pending_cases_8.json"))
 
     # 로깅 설정
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
@@ -266,9 +267,10 @@ def _normalize_settings_paths(value: Settings) -> Settings:
     value.INTERIM_DATA_PATH = _resolve_project_path(value.INTERIM_DATA_PATH)
     value.PROCESSED_DATA_PATH = _resolve_project_path(value.PROCESSED_DATA_PATH)
     value.SAMPLES_DATA_PATH = _resolve_project_path(value.SAMPLES_DATA_PATH)
+    value.UI_CASES_DATA_PATH = _resolve_project_path(value.UI_CASES_DATA_PATH)
 
     raw_data_dir = DATA_DIR / "raw_data"
-    if not Path(value.RAW_DATA_PATH).exists() and raw_data_dir.exists():
+    if not os.getenv("RAW_DATA_PATH") and not Path(value.RAW_DATA_PATH).exists() and raw_data_dir.exists():
         value.RAW_DATA_PATH = str(raw_data_dir)
     return value
 
