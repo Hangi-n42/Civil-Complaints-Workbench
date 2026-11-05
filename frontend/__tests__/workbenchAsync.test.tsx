@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WorkbenchPage from "../app/workbench/page";
-import { fetchUiCasesApi, searchCasesApi, streamQaApi, type SearchResponseData } from "../lib/api";
+import { fetchUiCasesApi, loadLastDraft, searchCasesApi, streamQaApi, type SearchResponseData } from "../lib/api";
 
 const navigation = vi.hoisted(() => ({
   params: new URLSearchParams("case_id=A"),
@@ -126,14 +126,15 @@ describe("워크벤치 민원별 비동기 결과 경계", () => {
     expect(aParams.signal?.aborted).toBe(true);
     expect(qaMock.mock.calls[1][0].signal?.aborted).toBe(false);
     await act(async () => bPending.resolve({ data: { complaintId: "B", answer: "B 확정 초안" }, error: null }));
-    const saved = window.localStorage.getItem("workbench-last-draft");
+    const saved = loadLastDraft("B");
     await act(async () => {
       if (outcome === "throw") pending.reject(new Error("A QA 예외"));
       else pending.resolve({ data: { complaintId: "A", answer: "A 늦은 초안" }, error: outcome === "failure" ? { message: "A QA 실패" } : null });
     });
     expect(host.querySelector("textarea")?.value).toBe("B 확정 초안");
     expect(host.textContent).not.toContain("A QA");
-    expect(window.localStorage.getItem("workbench-last-draft")).toBe(saved);
+    expect(loadLastDraft("B")).toEqual(saved);
+    expect(loadLastDraft("A")?.draft).toBeNull();
   });
 
   it("A 자동 선행검색 중 B로 전환하면 A QA를 시작하지 않는다", async () => {
@@ -143,7 +144,7 @@ describe("워크벤치 민원별 비동기 결과 경계", () => {
     await click("민원 B");
     await act(async () => pending.resolve({ data: bundle(), error: null }));
     expect(qaMock).not.toHaveBeenCalled();
-    expect(window.localStorage.getItem("workbench-last-draft")).toBeNull();
+    expect(loadLastDraft("A")?.draft).toBeNull();
     expect(host.textContent).not.toContain("생성할 수 없습니다");
   });
 
@@ -165,7 +166,7 @@ describe("워크벤치 민원별 비동기 결과 경계", () => {
     await act(async () => pending.resolve({ data: { complaintId: "A", answer: "이전 근거 초안" }, error: null }));
     expect(qaMock.mock.calls[0][0].signal?.aborted).toBe(true);
     expect(host.querySelector("textarea")?.value).toBe("");
-    expect(window.localStorage.getItem("workbench-last-draft")).toBeNull();
+    expect(loadLastDraft("A")?.draft).toBeNull();
     await click("초안");
     expect(qaMock.mock.calls[1][0].query).toBe("새 근거 검색");
     expect(host.querySelector("textarea")?.value).toBe("A 초안");
@@ -193,7 +194,7 @@ describe("워크벤치 민원별 비동기 결과 경계", () => {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("저장 공간 부족"); });
     await click("초안");
     expect(host.querySelector("textarea")?.value).toBe("A 초안");
-    expect(host.textContent).toContain("초안은 생성됐지만");
+    expect(host.textContent).toContain("이 브라우저에 작업 내용을 저장하지 못했습니다");
   });
 
   it("컴포넌트 해제는 진행 중 요청을 취소한다", async () => {

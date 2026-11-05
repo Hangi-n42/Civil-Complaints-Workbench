@@ -16,17 +16,15 @@ import {
   type RetrievedDoc,
   type SearchResponseData,
   type WorkbenchCaseContext,
-  loadPersistedRoutingInfo,
+  type DraftSnapshot,
   loadLastDraft,
   saveDraftSnapshot,
-  clearDraftSnapshot,
 } from "@/lib/api";
 import { PriorityBadge, StatusBadge } from "@/components/SearchUI";
 import { loadCaseStatusOverrides, persistCaseStatusSubset } from "@/lib/caseStatus";
 import { safeString } from "@/lib/safe-data";
 import { confidenceBand, firstEvidence, validResponsibleUnits, reviewAssignment, buildTransferMemo, type ResponsibleUnit } from "@/lib/responsibleUnit";
 import {
-  buildDraftTextareaValue,
   computeSegmentViewMode,
   pairSegmentsWithActions,
   selectDraftRequestSegments,
@@ -71,25 +69,6 @@ type WorkbenchCase = AssignedCase & {
   structured?: WorkbenchStructuredFields;
 };
 
-type PersistedRoutingInfo = {
-  complaintId?: string;
-  routingTrace?: RoutingTrace;
-  strategyId?: string | null;
-  routeKey?: string | null;
-};
-
-type DraftSnapshot = {
-  draft?: QaResponseData & {
-    complaintId?: string;
-    structuredOutput?: {
-      summary?: string;
-      actionItems?: string[];
-      requestSegments?: string[];
-    };
-    answer?: string;
-  };
-};
-
 type CaseRequest = { caseId: string; controller: AbortController };
 
 type DepartmentTrack = {
@@ -119,6 +98,7 @@ function WorkbenchContent() {
   const [caseList, setCaseList] = useState<WorkbenchCase[]>([]);
   const [casesLoading, setCasesLoading] = useState(true);
   const [selectedCaseId, setSelectedCaseId] = useState<string>(urlCaseId || "");
+  const [previousUrlCaseId, setPreviousUrlCaseId] = useState(urlCaseId);
   const [caseStatuses, setCaseStatuses] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [searchStage, setSearchStage] = useState<SearchStage>("empty");
@@ -137,9 +117,12 @@ function WorkbenchContent() {
   const [draftQueryHash, setDraftQueryHash] = useState<string | null>(null);
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
   const [isRawCollapsed, setIsRawCollapsed] = useState(false);
+  const [restoredCaseId, setRestoredCaseId] = useState<string | null>(null);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const activeCaseId = useRef(selectedCaseId);
   const searchRequest = useRef<CaseRequest | null>(null);
   const draftRequest = useRef<CaseRequest | null>(null);
+  const currentDraft = useRef<DraftSnapshot | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -151,7 +134,10 @@ function WorkbenchContent() {
         }
 
         // fetchUiCasesApi는 백엔드 오류·빈 응답이면 목업으로 폴백하므로 결과를 그대로 사용한다.
-        setCaseList(response.data.cases);
+        const cases = response.data.cases;
+        setCaseList(cases);
+        setCaseStatuses(loadCaseStatusOverrides(cases.map((item) => item.case_id)));
+        setSelectedCaseId((current) => cases.some((item) => item.case_id === current) ? current : cases[0]?.case_id || "");
       })
       .finally(() => {
         if (isMounted) {
@@ -163,6 +149,13 @@ function WorkbenchContent() {
       isMounted = false;
     };
   }, []);
+
+  if (previousUrlCaseId !== urlCaseId) {
+    setPreviousUrlCaseId(urlCaseId);
+    if (urlCaseId && (caseList.length === 0 || caseList.some((item) => item.case_id === urlCaseId))) {
+      setSelectedCaseId(urlCaseId);
+    }
+  }
 
   const selectedCase = useMemo<WorkbenchCase>(() => {
     // 로딩 중(caseList 비어있음)에도 selectedCase가 undefined가 되지 않도록 빈 케이스로 폴백한다.
@@ -188,85 +181,54 @@ function WorkbenchContent() {
   }, [selectedCase.case_id]);
 
   useEffect(() => {
-    if (caseList.length === 0) {
-      return;
+    if (caseList.length > 0 && selectedCase.case_id && !caseList.some((item) => item.case_id === urlCaseId)) {
+      router.replace(`/workbench?case_id=${encodeURIComponent(selectedCase.case_id)}`);
     }
+  }, [caseList, router, selectedCase.case_id, urlCaseId]);
 
-    const selectedExists = caseList.some((item) => item.case_id === selectedCaseId);
-    if (selectedExists) {
-      return;
-    }
+  // 민원이 바뀐 렌더는 복원 상태로 다시 렌더한 뒤 커밋한다.
+  if (selectedCase.case_id && restoredCaseId !== selectedCase.case_id) {
+    const last = loadLastDraft(selectedCase.case_id);
+    const defaultInfo = buildDefaultRoutingInfoFromCase(selectedCase);
 
-    const nextSelectedId = urlCaseId && caseList.some((item) => item.case_id === urlCaseId) ? urlCaseId : caseList[0]?.case_id || "";
-    if (nextSelectedId && nextSelectedId !== selectedCaseId) {
-      setSelectedCaseId(nextSelectedId);
-      router.replace(`/workbench?case_id=${encodeURIComponent(nextSelectedId)}`);
-    }
-  }, [caseList, router, selectedCaseId, urlCaseId]);
-
-  useEffect(() => {
-    setCaseStatuses(loadCaseStatusOverrides(caseList.map((item) => item.case_id)));
-  }, [caseList]);
-
-  useEffect(() => {
-    if (urlCaseId && urlCaseId !== selectedCaseId && caseList.some((item) => item.case_id === urlCaseId)) {
-      setSelectedCaseId(urlCaseId);
-    }
-  }, [caseList, selectedCaseId, urlCaseId]);
-
-  useEffect(() => {
-    if (!selectedCase) {
-      return;
-    }
-
-    setSearchQuery("");
-    setSearchStage("empty");
-    setSearchBundle(null);
+    setSearchQuery(last?.searchQuery ?? "");
+    setSearchStage(last?.searchBundle?.retrievedDocs.length ? "success" : "empty");
+    setSearchBundle(last?.searchBundle ?? null);
     setSearchError(null);
-    setRoutingTrace(null);
-    setRoutingHint(null);
-    setStrategyId(null);
-    setRouteKey(null);
-    setDraftStage("idle");
-    setDraftResponse(null);
-    setDraftQueryHash(null);
+    setRoutingTrace(last?.searchBundle?.routingTrace ?? defaultInfo.routingTrace);
+    setRoutingHint(last?.searchBundle?.routingHint ?? null);
+    setStrategyId(last?.searchBundle?.strategyId ?? defaultInfo.strategyId);
+    setRouteKey(last?.searchBundle?.routeKey ?? defaultInfo.routeKey);
+    setDraftStage(last?.draft ? "success" : "idle");
+    setDraftResponse(last?.draft ?? null);
+    setDraftEditorValue(last?.editorValue ?? "");
+    setDraftQueryHash(last?.draftQueryHash ?? null);
     setDraftError(null);
+    setStorageError(null);
     setExpandedDocId(null);
     setIsRawCollapsed(false);
-    // Clear draft snapshot when switching cases
-    clearDraftSnapshot();
-  }, [selectedCaseId, selectedCase]);
+    setRestoredCaseId(selectedCase.case_id);
+  }
 
-  // Restore persisted routing info and last draft when selecting a case + ensure center-right sync (no UI changes)
   useEffect(() => {
+    currentDraft.current = loadLastDraft(selectedCase.case_id) ?? {
+      complaintId: selectedCase.case_id, draft: null, editorValue: "",
+      searchQuery: "", searchBundle: null, draftQueryHash: null,
+    };
+  }, [selectedCase.case_id]);
+
+  function persistDraft(changes: Partial<DraftSnapshot> = {}) {
+    const current = currentDraft.current;
+    if (!current || current.complaintId !== selectedCase.case_id || activeCaseId.current !== selectedCase.case_id) return;
+    const snapshot = { ...current, ...changes, complaintId: selectedCase.case_id };
+    currentDraft.current = snapshot;
     try {
-      const persisted = loadPersistedRoutingInfo() as PersistedRoutingInfo | null;
-      const last = loadLastDraft() as DraftSnapshot | null;
-
-      // Set default routing info based on selected case context for center-right sync
-      const defaultInfo = buildDefaultRoutingInfoFromCase(selectedCase);
-      setRoutingTrace(defaultInfo.routingTrace);
-      setStrategyId(defaultInfo.strategyId);
-      setRouteKey(defaultInfo.routeKey);
-
-      // Override with persisted routing info if available
-      if (persisted?.complaintId === selectedCase.case_id && persisted.routingTrace) {
-        setRoutingTrace(persisted.routingTrace);
-        setStrategyId(persisted.strategyId || null);
-        setRouteKey(persisted.routeKey || null);
-      }
-
-      // Restore last draft if it matches selected case.
-      // 편집 textarea 값(answer)은 draftTextareaValue useEffect가 단일 소스로 채우므로 여기선 응답 상태만 복원한다(이슈 #388, AC5).
-      if (last && last.draft && last.draft.complaintId === selectedCase.case_id) {
-        setDraftResponse(last.draft);
-        setDraftStage("success");
-        setDraftError(null);
-      }
+      saveDraftSnapshot(snapshot.draft, snapshot);
+      setStorageError(null);
     } catch {
-      // no-op: best-effort restore
+      setStorageError("이 브라우저에 작업 내용을 저장하지 못했습니다. 이동하거나 새로고침하면 편집 내용이 유실될 수 있습니다.");
     }
-  }, [selectedCaseId, selectedCase]);
+  }
 
   function persistStatuses(nextStatuses: Record<string, string>) {
     const sanitized = persistCaseStatusSubset(nextStatuses, caseList.map((item) => item.case_id));
@@ -277,6 +239,7 @@ function WorkbenchContent() {
     if (caseId === selectedCaseId) {
       return;
     }
+    persistDraft();
     activeCaseId.current = caseId;
     searchRequest.current?.controller.abort();
     draftRequest.current?.controller.abort();
@@ -349,6 +312,7 @@ function WorkbenchContent() {
     setStrategyId(response.data.strategyId);
     setRouteKey(response.data.routeKey);
     setSearchStage(response.data.retrievedDocs.length > 0 ? "success" : "empty");
+    persistDraft({ searchBundle: response.data });
     return response.data;
   }
 
@@ -413,13 +377,9 @@ function WorkbenchContent() {
 
       setDraftStage("success");
       setDraftResponse(response.data);
+      setDraftEditorValue(response.data.answer);
       setDraftQueryHash(hashQuery(generationQuery));
-      // Save draft snapshot for before/after comparison
-      try {
-        saveDraftSnapshot({ ...response.data, complaintId: request.caseId });
-      } catch {
-        if (isCurrent()) setDraftError("초안은 생성됐지만 이 브라우저에 저장하지 못했습니다.");
-      }
+      persistDraft({ draft: response.data, editorValue: response.data.answer, draftQueryHash: hashQuery(generationQuery) });
     } catch (error: unknown) {
       if (!isCurrent()) return;
       setDraftStage("error");
@@ -446,13 +406,6 @@ function WorkbenchContent() {
     draftStage === "success" &&
     isDraftStale({ draftQueryHash, searchQueryHash: searchBundle ? hashQuery(searchBundle.query) : null });
 
-  // 공식 회신문 편집값은 answer만 사용한다(이슈 #388). 보조 메타데이터는 DraftSupplementaryPanel에서만 표시한다.
-  const draftTextareaValue = buildDraftTextareaValue({ draftStage, answer: draftResponse?.answer });
-
-  useEffect(() => {
-    setDraftEditorValue(draftTextareaValue);
-  }, [draftTextareaValue]);
-
   const currentStatus = caseStatuses[selectedCase.case_id] || selectedCase.status || "미처리";
   const topDocs = searchBundle?.results || searchBundle?.retrievedDocs || [];
   const isPreSearchState = searchStage === "empty" && topDocs.length === 0;
@@ -469,7 +422,7 @@ function WorkbenchContent() {
               <span className="mx-2 text-slate-300">|</span>
               <button type="button" onClick={() => router.push("/admin")} className="hover:text-slate-900">관리자 통계</button>
             </div>
-            <div>상태: {currentStatus}</div>
+            <div>로컬 작업 상태: {currentStatus}</div>
           </div>
 
           <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
@@ -606,12 +559,16 @@ function WorkbenchContent() {
                   ) : (
                     <textarea
                       value={draftEditorValue}
-                      onChange={(event) => setDraftEditorValue(event.target.value)}
+                      onChange={(event) => {
+                        setDraftEditorValue(event.target.value);
+                        persistDraft({ editorValue: event.target.value });
+                      }}
                       placeholder="여기에 내용을 입력하거나 AI가 생성한 초안을 편집하세요..."
                       className="h-44 w-full resize-none border border-slate-300 bg-slate-50 px-3 py-2 text-sm leading-7 text-slate-700 outline-none"
                     />
                   )}
                   {draftError && <div className="mt-2 text-xs text-red-600">{draftError}</div>}
+                  {storageError && <div role="alert" className="mt-2 text-xs text-red-600">{storageError}</div>}
                   {draftStage === "success" && (segmentViewMode === "single" || segmentViewMode === "multi") && (
                     <DraftSupplementaryPanel
                       mode={segmentViewMode}
@@ -639,7 +596,10 @@ function WorkbenchContent() {
                 <div className="border-b border-slate-300 px-2 py-2">
                   <input
                     value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
+                    onChange={(event) => {
+                      setSearchQuery(event.target.value);
+                      persistDraft({ searchQuery: event.target.value });
+                    }}
                     className="h-9 w-full border border-slate-300 px-2 text-sm outline-none"
                     placeholder="검색어"
                   />
@@ -751,6 +711,7 @@ function WorkbenchContent() {
                 </div>
               </div>
 
+              <p className="text-xs text-slate-600">검토중·처리완료는 이 브라우저의 작업 상태입니다. 공식 회신이나 행정 처리 완료로 전송되지 않습니다.</p>
               <div className="grid grid-cols-2 gap-3 pb-2">
                 <button
                   type="button"

@@ -131,6 +131,15 @@ export type QaResponseData = {
   };
 };
 
+export type DraftSnapshot = {
+  complaintId: string;
+  draft: QaResponseData | null;
+  editorValue: string;
+  searchQuery: string;
+  searchBundle: SearchResponseData | null;
+  draftQueryHash: string | null;
+};
+
 type ApiError = { message: string; code?: string };
 
 type ApiResponse<T> = {
@@ -799,18 +808,80 @@ export function loadPersistedRoutingInfo() {
   return readLocalStorageJson(ROUTING_STORAGE_KEY);
 }
 
-export function loadLastDraft() {
-  return readLocalStorageJson(DRAFT_STORAGE_KEY);
+function restoreStoredDraft(draft: QaResponseData | null | undefined, complaintId: string): QaResponseData | null {
+  if (draft?.complaintId !== complaintId || typeof draft.answer !== "string") return null;
+  const output = draft.structuredOutput;
+  return {
+    ...draft,
+    structuredOutput: output && typeof output === "object" ? {
+      summary: typeof output.summary === "string" ? output.summary : undefined,
+      actionItems: Array.isArray(output.actionItems) ? output.actionItems.filter((item) => typeof item === "string") : [],
+      requestSegments: Array.isArray(output.requestSegments) ? output.requestSegments.filter((item) => typeof item === "string") : [],
+      segmentAnswers: Array.isArray(output.segmentAnswers) ? output.segmentAnswers.filter((card) => (
+        card && Number.isInteger(card.index) && card.index >= 0 && typeof card.requestSegment === "string"
+        && typeof card.answer === "string" && typeof card.hasEvidence === "boolean"
+        && Array.isArray(card.caseIds) && card.caseIds.every((id) => typeof id === "string")
+      )) : [],
+    } : undefined,
+  };
 }
 
-export function saveDraftSnapshot(draft: QaResponseData) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ draft }));
+function restoreStoredSearchBundle(bundle: SearchResponseData | null | undefined): SearchResponseData | null {
+  if (!bundle || typeof bundle.query !== "string" || !Array.isArray(bundle.retrievedDocs)
+    || !Array.isArray(bundle.results) || !Array.isArray(bundle.searchResults)
+    || !bundle.routingHint || typeof bundle.routingHint !== "object"
+    || !bundle.routingTrace || typeof bundle.routingTrace !== "object") return null;
+  const validDoc = (doc: RetrievedDoc) => doc && typeof doc.docId === "string"
+    && typeof doc.title === "string" && typeof doc.snippet === "string"
+    && [doc.caseId, doc.case_id].every((id) => id === undefined || typeof id === "string");
+  return {
+    ...bundle,
+    retrievedDocs: bundle.retrievedDocs.filter(validDoc),
+    results: bundle.results.filter(validDoc),
+    searchResults: bundle.searchResults.filter(validDoc),
+  };
 }
 
-export function clearDraftSnapshot() {
+export function loadLastDraft(complaintId: string): DraftSnapshot | null {
+  if (!complaintId) return null;
+  const snapshot = readLocalStorageJson(`${DRAFT_STORAGE_KEY}:${encodeURIComponent(complaintId)}`) as DraftSnapshot | null;
+  const draft = restoreStoredDraft(snapshot?.draft, complaintId);
+  if (snapshot?.complaintId === complaintId && (typeof snapshot.editorValue === "string" || draft)) {
+    return {
+      complaintId, draft,
+      editorValue: typeof snapshot.editorValue === "string" ? snapshot.editorValue : draft?.answer ?? "",
+      searchQuery: typeof snapshot.searchQuery === "string" ? snapshot.searchQuery : "",
+      searchBundle: restoreStoredSearchBundle(snapshot.searchBundle),
+      draftQueryHash: typeof snapshot.draftQueryHash === "string" ? snapshot.draftQueryHash : null,
+    };
+  }
+  // 공통 키를 쓰던 이전 버전 초안은 민원 ID가 확인되는 경우에만 복원한다.
+  const legacy = readLocalStorageJson(DRAFT_STORAGE_KEY) as { draft?: QaResponseData } | null;
+  const legacyDraft = restoreStoredDraft(legacy?.draft, complaintId);
+  if (!legacyDraft) return null;
+  return { complaintId, draft: legacyDraft, editorValue: legacyDraft.answer, searchQuery: "", searchBundle: null, draftQueryHash: null };
+}
+
+export function saveDraftSnapshot(draft: QaResponseData | null, details?: Omit<DraftSnapshot, "draft">) {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+  const complaintId = details?.complaintId || draft?.complaintId;
+  if (!complaintId) return;
+  const snapshot: DraftSnapshot = {
+    complaintId,
+    draft: draft ? { ...draft, complaintId } : null,
+    editorValue: details?.editorValue ?? draft?.answer ?? "",
+    searchQuery: details?.searchQuery ?? "",
+    searchBundle: details?.searchBundle ?? null,
+    draftQueryHash: details?.draftQueryHash ?? null,
+  };
+  window.localStorage.setItem(`${DRAFT_STORAGE_KEY}:${encodeURIComponent(complaintId)}`, JSON.stringify(snapshot));
+}
+
+export function clearDraftSnapshot(complaintId: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(`${DRAFT_STORAGE_KEY}:${encodeURIComponent(complaintId)}`);
+  const legacy = readLocalStorageJson(DRAFT_STORAGE_KEY) as { draft?: QaResponseData } | null;
+  if (legacy?.draft?.complaintId === complaintId) window.localStorage.removeItem(DRAFT_STORAGE_KEY);
 }
 
 function buildRoutingTrace(category: string): RoutingTrace {
