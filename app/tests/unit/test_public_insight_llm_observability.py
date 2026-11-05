@@ -80,7 +80,7 @@ def test_llm_observability_api_filters_provider_and_model_without_pii() -> None:
         },
     )
     set_complaint_intelligence_service(service)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
 
     response = client.get(
         "/complaint-intelligence/public-insights/llm-observability",

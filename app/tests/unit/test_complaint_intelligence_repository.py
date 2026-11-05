@@ -138,7 +138,7 @@ def test_dashboard_api_reads_persisted_state_after_service_recreation(tmp_path) 
         config=config,
     )
     set_complaint_intelligence_service(first_service)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
 
     response = client.post(
         "/complaint-intelligence/dashboard/run-analysis",

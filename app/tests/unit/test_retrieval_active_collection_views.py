@@ -42,7 +42,7 @@ def test_admin_cache_follows_active_collection_change(active_corpus):
 def test_debug_count_and_sample_read_current_logical_collection(active_corpus):
     persist, client = active_corpus
     activate_collection(persist, "civil_cases_v3", "staged_civil_cases")
-    api = TestClient(app)
+    api = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     count = api.get("/api/v1/chroma/collections/civil_cases_v3/count")
     assert count.status_code == 200
     assert count.json()["data"]["count"] == 2
@@ -73,7 +73,7 @@ def test_debug_collection_listing_shows_current_dimension(active_corpus):
 def test_empty_staging_does_not_break_debug_listing_or_sqlite_sample(active_corpus):
     persist, client = active_corpus
     client.create_collection("unfinished_staging", embedding_function=None)
-    response = TestClient(app).get("/api/v1/chroma/collections")
+    response = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000)).get("/api/v1/chroma/collections")
     assert response.status_code == 200
     rows = response.json()["data"]["collections"]
     empty = next(row for row in rows if row["name"] == "unfinished_staging")

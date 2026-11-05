@@ -100,7 +100,7 @@ def _duplicate_score_evidence_value(result) -> float:
 
 
 def test_same_apartment_noise_complaints_create_candidate_group_with_contract_fields() -> None:
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     events = [
         _event(
             "noise-basic",
@@ -178,7 +178,7 @@ def test_redaction_placeholders_do_not_inflate_scoring_similarity_or_score() -> 
 
 
 def test_same_keywords_different_locations_get_location_mismatch_or_separate_groups() -> None:
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     events = [
         _event("noise-happy", region="행복아파트", entity_texts=["행복아파트", "공사장", "소음"]),
         _event("noise-blue", region="푸른아파트", entity_texts=["푸른아파트", "공사장", "소음"]),
@@ -194,7 +194,7 @@ def test_same_keywords_different_locations_get_location_mismatch_or_separate_gro
 
 
 def test_request_type_mismatch_is_reported_for_same_event_group() -> None:
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     events = [
         _event(
             "parking-enforcement",
@@ -223,7 +223,7 @@ def test_request_type_mismatch_is_reported_for_same_event_group() -> None:
 
 
 def test_candidate_draft_reply_is_rejected_with_409() -> None:
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     data = _run_analysis(client, [_event("draft-candidate-1"), _event("draft-candidate-2", minutes_ago=10)])
     merge_id = data["duplicate_groups"][0]["merge_id"]
 
@@ -234,7 +234,7 @@ def test_candidate_draft_reply_is_rejected_with_409() -> None:
 
 
 def test_duplicate_groups_can_be_filtered_by_status_and_complaint_id() -> None:
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     data = _run_analysis(client, [_event("filter-1"), _event("filter-2", minutes_ago=10)])
     merge_id = data["duplicate_groups"][0]["merge_id"]
 
@@ -256,7 +256,7 @@ def test_duplicate_groups_can_be_filtered_by_status_and_complaint_id() -> None:
 
 
 def test_confirmed_group_returns_pii_safe_draft_reply_payload() -> None:
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     events = [
         _event(
             "draft-safe-1",
@@ -294,7 +294,7 @@ def test_confirmed_group_returns_pii_safe_draft_reply_payload() -> None:
 
 
 def test_rejected_and_split_groups_cannot_build_draft_reply() -> None:
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     rejected_data = _run_analysis(client, [_event("reject-1"), _event("reject-2", minutes_ago=5)])
     rejected_id = rejected_data["duplicate_groups"][0]["merge_id"]
     reject_response = client.post(f"/complaint-intelligence/duplicate-groups/{rejected_id}/reject")
@@ -315,7 +315,7 @@ def test_rejected_and_split_groups_cannot_build_draft_reply() -> None:
 
 
 def test_candidate_reply_draft_generation_is_rejected_with_409() -> None:
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     data = _run_analysis(client, [_event("reply-candidate-1"), _event("reply-candidate-2", minutes_ago=10)])
     merge_id = data["duplicate_groups"][0]["merge_id"]
 
@@ -383,7 +383,7 @@ def test_confirmed_group_reply_draft_uses_generation_pipeline_and_excludes_membe
     monkeypatch.setattr("app.complaint_intelligence.service.get_retrieval_service", lambda: FakeRetrievalService())
     monkeypatch.setattr("app.complaint_intelligence.service.get_generation_service", lambda: FakeGenerationService())
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     data = _run_analysis(client, [_event("reply-flow-1"), _event("reply-flow-2", minutes_ago=10)])
     merge_id = data["duplicate_groups"][0]["merge_id"]
     confirm_response = client.post(f"/complaint-intelligence/duplicate-groups/{merge_id}/confirm")
@@ -421,7 +421,7 @@ def test_reply_draft_falls_back_when_only_duplicate_members_are_retrieved(monkey
     monkeypatch.setattr("app.complaint_intelligence.service.get_retrieval_service", lambda: FakeRetrievalService())
     monkeypatch.setattr("app.complaint_intelligence.service.get_generation_service", lambda: FailIfCalledGenerationService())
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     data = _run_analysis(client, [_event("fallback-flow-1"), _event("fallback-flow-2", minutes_ago=10)])
     merge_id = data["duplicate_groups"][0]["merge_id"]
     assert client.post(f"/complaint-intelligence/duplicate-groups/{merge_id}/confirm").status_code == 200
@@ -448,7 +448,7 @@ def test_reply_draft_falls_back_when_retrieval_fails(monkeypatch) -> None:
     monkeypatch.setattr("app.complaint_intelligence.service.get_retrieval_service", lambda: FailingRetrievalService())
     monkeypatch.setattr("app.complaint_intelligence.service.get_generation_service", lambda: FailIfCalledGenerationService())
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     data = _run_analysis(client, [_event("retrieval-fail-1"), _event("retrieval-fail-2", minutes_ago=10)])
     merge_id = data["duplicate_groups"][0]["merge_id"]
     assert client.post(f"/complaint-intelligence/duplicate-groups/{merge_id}/confirm").status_code == 200

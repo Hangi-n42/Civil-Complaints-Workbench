@@ -51,7 +51,7 @@ def test_search_filter_rejects_invalid_entity_labels():
 
 
 def test_search_api_returns_400_for_invalid_entity_labels():
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/search",
         json={
@@ -68,7 +68,7 @@ def test_search_api_returns_400_for_invalid_entity_labels():
 
 
 def test_search_api_returns_400_for_invalid_date_range():
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post(
         "/api/v1/search",
         json={

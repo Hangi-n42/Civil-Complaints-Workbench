@@ -88,7 +88,7 @@ def test_qa_stream_emits_real_stage_order_and_compatible_done(monkeypatch):
         lambda: _StubCitationMapper(),
     )
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post("/api/v1/qa/stream", json=_payload())
 
     assert response.status_code == 200
@@ -115,7 +115,7 @@ def test_qa_stream_emits_existing_error_payload_as_error_event():
     payload = _payload()
     payload["routing_hint"]["strategy_id"] = "topic_general_high_v1"
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     response = client.post("/api/v1/qa/stream", json=payload)
 
     assert response.status_code == 200

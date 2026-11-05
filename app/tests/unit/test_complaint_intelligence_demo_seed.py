@@ -253,7 +253,7 @@ def test_default_seed_without_demo_thresholds_creates_alert_and_insight(tmp_path
 def test_dashboard_endpoint_contract_after_demo_seed_run(tmp_path) -> None:
     service, _seed, _alerts, _insights = _run_seed(tmp_path)
     set_complaint_intelligence_service(service)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
 
     response = client.get("/complaint-intelligence/dashboard")
 
