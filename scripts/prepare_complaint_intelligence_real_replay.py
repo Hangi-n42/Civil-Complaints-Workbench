@@ -26,6 +26,7 @@ from scripts.seed_complaint_intelligence_demo import (
 from app.complaint_intelligence.service import ComplaintIntelligenceService
 from app.complaint_intelligence.sqlite_repository import SQLiteComplaintIntelligenceRepository
 from app.complaint_intelligence.config import get_complaint_intelligence_config
+from app.complaint_intelligence.provenance import seed_source_provenance
 from dataclasses import replace
 
 
@@ -60,6 +61,7 @@ def main() -> int:
     run_report_path = Path(args.run_report)
     allow_synthetic_fill = str(args.allow_synthetic_fill).lower() == "true"
 
+    built_scenarios = False
     if not args.skip_build:
         seed, build_report = build_demo_seed(
             input_paths=[input_path],
@@ -71,6 +73,7 @@ def main() -> int:
             description=args.description,
         )
         seed, should_write_seed, fallback = choose_seed_payload(seed, seed_path)
+        built_scenarios = should_write_seed
         if fallback:
             build_report["fallback_to_existing_seed"] = fallback
             print(
@@ -100,7 +103,8 @@ def main() -> int:
         mode=str(seed_payload.get("mode") or "replay"),
         source_name=args.source_name,
         as_of=as_of,
-        metadata={"trigger": "explicit_real_replay_prepare", "seed_file": str(seed_path)},
+        metadata={"trigger": "explicit_real_replay_prepare", "seed_file": str(seed_path),
+                  "source_provenance": seed_source_provenance(seed_payload, built_scenarios=built_scenarios)},
     )
     duplicate_groups = service.run_duplicate_analysis(
         events,

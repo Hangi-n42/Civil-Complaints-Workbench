@@ -21,6 +21,7 @@ from app.complaint_intelligence.duplicate_merger.schemas import (
 from app.complaint_intelligence.public_insights.evidence_pack import PublicInsightEvidencePack
 from app.complaint_intelligence.public_insights.llm_observability import build_llm_observability_report
 from app.complaint_intelligence.repository import DashboardState
+from app.complaint_intelligence.provenance import RunProvenance, SourceProvenance, run_provenance
 from app.complaint_intelligence.schemas import (
     ComplaintIntelligenceEvent,
     IssueAlert,
@@ -41,6 +42,7 @@ class RunAnalysisRequest(BaseModel):
     mode: Optional[str] = None
     source_name: Optional[str] = None
     as_of: Optional[datetime] = None
+    source_provenance: SourceProvenance | None = None
 
 
 class RunAnalysisData(BaseModel):
@@ -56,6 +58,7 @@ class RunAnalysisData(BaseModel):
     public_insight_count: int
     alerts: list[IssueAlert]
     public_insights: list[PublicAgencyInsight]
+    provenance: RunProvenance | None = None
 
 
 class RunAnalysisResponse(BaseModel):
@@ -79,6 +82,7 @@ class AnalysisRunItem(BaseModel):
     completed_at: Optional[str] = None
     as_of: str
     metadata: dict[str, Any] = Field(default_factory=dict)
+    provenance: RunProvenance
 
 
 class AnalysisRunsData(BaseModel):
@@ -231,7 +235,7 @@ class DashboardSummary(BaseModel):
 
 
 class DashboardIssueAlertCard(BaseModel):
-    """FE 실시간 이슈 탭 카드."""
+    """FE 이슈 경보 탭 카드."""
 
     id: str
     status: str
@@ -309,6 +313,8 @@ class DashboardData(BaseModel):
     issue_alerts: list[DashboardIssueAlertCard]
     public_insights: list[DashboardPublicInsightCard]
     empty_state: dict[str, str]
+    operation: str = "stored_read"
+    provenance_runs: list[RunProvenance] = Field(default_factory=list)
 
 
 class DashboardResponse(BaseModel):
@@ -394,6 +400,7 @@ async def run_analysis(request: RunAnalysisRequest) -> RunAnalysisResponse:
             mode=request.mode,
             source_name=request.source_name,
             as_of=request.as_of,
+            metadata={"source_provenance": request.source_provenance.model_dump()} if request.source_provenance else None,
         )
     except DuplicateMergeConflict as exc:
         return _duplicate_conflict_response(exc)
@@ -418,6 +425,7 @@ async def run_analysis(request: RunAnalysisRequest) -> RunAnalysisResponse:
             public_insight_count=len(result.public_insights),
             alerts=result.alerts,
             public_insights=result.public_insights,
+            provenance=next((run_provenance(run) for run in service.list_analysis_runs(limit=5) if run.run_id == result.run_id), None),
         ),
     )
 
@@ -531,6 +539,7 @@ async def run_dashboard_analysis(request: RunAnalysisRequest) -> DashboardRespon
             mode=request.mode,
             source_name=request.source_name,
             as_of=request.as_of,
+            metadata={"source_provenance": request.source_provenance.model_dump()} if request.source_provenance else None,
         )
     except DuplicateMergeConflict as exc:
         return _duplicate_conflict_response(exc)
@@ -544,7 +553,8 @@ async def run_dashboard_analysis(request: RunAnalysisRequest) -> DashboardRespon
     return DashboardResponse(
         request_id=request_id,
         timestamp=now_iso(),
-        data=_dashboard_data(result.alerts, result.public_insights, state=service.get_dashboard_state()),
+        data=_dashboard_data(result.alerts, result.public_insights, state=service.get_dashboard_state(),
+                             operation="new_analysis", provenance_runs=[run_provenance(run) for run in service.list_analysis_runs(limit=5)]),
     )
 
 
@@ -561,7 +571,8 @@ async def get_dashboard(
     return DashboardResponse(
         request_id=make_request_id(),
         timestamp=now_iso(),
-        data=_dashboard_data(alerts, insights, state=service.get_dashboard_state()),
+        data=_dashboard_data(alerts, insights, state=service.get_dashboard_state(),
+                             provenance_runs=[run_provenance(run) for run in service.list_analysis_runs(limit=5)]),
     )
 
 
@@ -805,6 +816,7 @@ def _analysis_run_item(run: Any) -> AnalysisRunItem:
         completed_at=run.completed_at.isoformat() if run.completed_at else None,
         as_of=run.as_of.isoformat(),
         metadata=dict(run.metadata),
+        provenance=run_provenance(run),
     )
 
 
@@ -823,10 +835,14 @@ def _dashboard_data(
     insights: list[PublicAgencyInsight],
     *,
     state: DashboardState | None = None,
+    operation: str = "stored_read",
+    provenance_runs: list[RunProvenance] | None = None,
 ) -> DashboardData:
     """raw 분석 결과를 FE 카드형 read model로 변환한다."""
 
     return DashboardData(
+        operation=operation,
+        provenance_runs=provenance_runs or [],
         summary=DashboardSummary(
             as_of=state.as_of.isoformat() if state and state.as_of else None,
             latest_event_at=state.latest_event_at.isoformat() if state and state.latest_event_at else None,
@@ -844,13 +860,13 @@ def _dashboard_data(
             linked_alert_count=sum(1 for insight in insights if insight.linked_alert_ids),
         ),
         tabs=[
-            {"id": "issue_alerts", "label": "실시간 이슈"},
+            {"id": "issue_alerts", "label": "이슈 경보"},
             {"id": "public_insights", "label": "행정 인사이트"},
         ],
         issue_alerts=[_alert_card(alert) for alert in alerts],
         public_insights=[_insight_card(insight) for insight in insights],
         empty_state={
-            "issue_alerts": "현재 표시할 실시간 이슈가 없습니다.",
+            "issue_alerts": "현재 표시할 이슈 경보가 없습니다.",
             "public_insights": "현재 표시할 행정 인사이트가 없습니다.",
         },
     )
