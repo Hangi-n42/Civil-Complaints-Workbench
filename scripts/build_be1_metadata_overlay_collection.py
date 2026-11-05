@@ -8,8 +8,15 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import chromadb
+
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.retrieval.vectorstores.collection_alias import activate_collection, get_active_collection, resolve_collection_name
 
 
 OVERLAY_FIELDS = [
@@ -236,22 +243,23 @@ def main() -> None:
     batch_size = max(1, int(args.batch_size))
     client = chromadb.PersistentClient(path=args.persist_dir)
 
-    base_collection = client.get_collection(args.base_collection)
-    metadata_collection = client.get_collection(args.metadata_collection)
+    base_collection = get_active_collection(client, args.base_collection)
+    metadata_collection = get_active_collection(client, args.metadata_collection)
     metadata_lookup, lookup_stats = _load_metadata_lookup(metadata_collection, batch_size=batch_size)
 
-    if args.replace:
-        try:
-            client.delete_collection(args.output_collection)
-        except Exception:
-            pass
+    base_count = int(base_collection.count())
+    if args.replace and not base_count:
+        raise ValueError("base collection contains no records; existing output is unchanged")
 
+    physical_name = (
+        f"ccw-overlay-{uuid4().hex}" if args.replace
+        else resolve_collection_name(args.persist_dir, args.output_collection)
+    )
     output_collection = client.get_or_create_collection(
-        name=args.output_collection,
+        name=physical_name,
         metadata={"hnsw:space": "cosine"},
     )
 
-    base_count = int(base_collection.count())
     matched_count = 0
     unmatched_count = 0
     overlay_decisions = {field: Counter() for field in OVERLAY_FIELDS}
@@ -300,6 +308,8 @@ def main() -> None:
         print(f"[overlay] {min(len(final_metadatas), base_count)}/{base_count}")
 
     output_count = int(output_collection.count())
+    if args.replace and output_count != base_count:
+        raise ValueError("overlay collection count does not match base collection")
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "persist_dir": str(args.persist_dir),
@@ -324,6 +334,9 @@ def main() -> None:
     args.out_json.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     args.out_md.parent.mkdir(parents=True, exist_ok=True)
     args.out_md.write_text(_render_markdown(report), encoding="utf-8")
+
+    if args.replace:
+        activate_collection(args.persist_dir, args.output_collection, physical_name)
 
     print(f"[done] collection={args.output_collection} count={output_count}")
     print(f"[JSON] {args.out_json}")

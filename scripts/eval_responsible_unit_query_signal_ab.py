@@ -29,6 +29,8 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 import chromadb
 
 from app.evaluation.datasets import sha256_file
@@ -94,9 +96,7 @@ def augment_signals_with_departments(
 
 def load_doc_departments(collection_name: str) -> dict[str, list[str]]:
     """case_id -> 문서쪽 responsible_units(리스트). 정답 문서 부서 매칭 진단용."""
-    col = chromadb.PersistentClient(path=str(PROJECT_ROOT / "data" / "chroma_db")).get_collection(
-        collection_name
-    )
+    col = get_active_collection(chromadb.PersistentClient(path=str(PROJECT_ROOT / "data" / "chroma_db")), collection_name)
     metas = col.get(include=["metadatas"])["metadatas"]
     out: dict[str, list[str]] = {}
     for meta in metas:

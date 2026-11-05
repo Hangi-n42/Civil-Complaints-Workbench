@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 DEFAULT_EVAL_FILE = ROOT / "data" / "departments" / "eval" / "responsible_unit_holdout1000.auto.jsonl"
 DEFAULT_MASTER_FILE = ROOT / "data" / "departments" / "busan_departments_master.json"
 NONE_LABEL = "NONE"
@@ -89,7 +91,7 @@ def _build_case_metadata_map(
     import chromadb
 
     client = chromadb.PersistentClient(path=persist_dir)
-    col = client.get_collection(collection)
+    col = get_active_collection(client, collection)
     payload = col.get(include=["metadatas"])
     case_to_meta: Dict[str, Dict[str, Any]] = {}
     case_to_chunk_index: Dict[str, int] = {}

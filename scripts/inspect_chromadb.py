@@ -31,6 +31,8 @@ from typing import Any, Dict, Iterable, List, Optional
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection, resolve_collection_name
+
 from app.core.config import settings
 
 
@@ -131,7 +133,7 @@ def _sqlite_docs(
             }
 
         cur = con.cursor()
-        cur.execute("select id, name, dimension from collections where name = ?", (collection_name,))
+        cur.execute("select id, name, dimension from collections where name = ?", (resolve_collection_name(persist_dir, collection_name),))
         row = cur.fetchone()
         if not row:
             return {
@@ -256,7 +258,7 @@ def _sqlite_dump_docs(
             }
 
         cur = con.cursor()
-        cur.execute("select id, dimension from collections where name = ?", (collection_name,))
+        cur.execute("select id, dimension from collections where name = ?", (resolve_collection_name(persist_dir, collection_name),))
         row = cur.fetchone()
         if not row:
             return {
@@ -598,7 +600,7 @@ def cmd_count(args: argparse.Namespace) -> int:
 
     client = chromadb.PersistentClient(path=_normalize_persist_dir_for_chroma(args.persist_dir))
     try:
-        collection = client.get_collection(args.collection)
+        collection = get_active_collection(client, args.collection)
         print(collection.count())
     except Exception as exc:
         if _looks_like_hnsw_load_error(exc):
@@ -615,7 +617,7 @@ def cmd_sample(args: argparse.Namespace) -> int:
 
     client = chromadb.PersistentClient(path=_normalize_persist_dir_for_chroma(args.persist_dir))
     try:
-        collection = client.get_collection(args.collection)
+        collection = get_active_collection(client, args.collection)
     except Exception as exc:
         if _looks_like_hnsw_load_error(exc):
             result = _sqlite_docs(
@@ -701,7 +703,7 @@ def cmd_dump(args: argparse.Namespace) -> int:
 
     client = chromadb.PersistentClient(path=_normalize_persist_dir_for_chroma(args.persist_dir))
     try:
-        collection = client.get_collection(args.collection)
+        collection = get_active_collection(client, args.collection)
     except Exception as exc:
         if _looks_like_hnsw_load_error(exc):
             raise RuntimeError(

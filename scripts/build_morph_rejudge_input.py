@@ -3,6 +3,8 @@
 import json, os, sys, chromadb
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+
+from app.retrieval.vectorstores.collection_alias import get_active_collection
 import app.retrieval.search.hybrid as H
 from kiwipiepy import Kiwi
 from app.core.config import settings
@@ -14,7 +16,7 @@ def morph_tok(text):
 H._tokenize = morph_tok
 
 RRF_K = settings.RRF_K
-col = chromadb.PersistentClient(path=os.path.join(ROOT, 'data/chroma_db')).get_collection('civil_cases_v3')
+col = get_active_collection(chromadb.PersistentClient(path=os.path.join(ROOT, 'data/chroma_db')), 'civil_cases_v3')
 got = col.get(include=['documents', 'metadatas'])
 case_ids, texts, doc_by_cid, seen = [], [], {}, set()
 for sid, doc, meta in zip(got['ids'], got['documents'], got['metadatas']):

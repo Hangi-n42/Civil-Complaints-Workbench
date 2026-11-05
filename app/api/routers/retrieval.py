@@ -11,11 +11,12 @@ from app.api.schemas.retrieval import (
     IndexRequest,
     IndexResponse,
     IndexResponseData,
+    PublishIndexRequest,
     SearchRequest,
     SearchResponse,
     SearchResponseData,
 )
-from app.core.exceptions import RetrievalError
+from app.core.exceptions import IndexingInputError, RetrievalError
 from app.core.logging import api_logger
 from app.retrieval.analyzers.request_segment_analysis import (
     build_request_segment_analysis,
@@ -218,6 +219,14 @@ async def index_documents(request: IndexRequest) -> IndexResponse:
             rebuild=rebuild,
             collection_name=request.collection_name,
         )
+    except IndexingInputError as e:
+        return error_response(
+            request_id=request_id,
+            error_code="BAD_REQUEST",
+            message=str(e),
+            status_code=400,
+            retryable=False,
+        )
     except RetrievalError as e:
         took_ms = int((perf_counter() - start) * 1000)
         _log_error(
@@ -275,6 +284,37 @@ async def index_documents(request: IndexRequest) -> IndexResponse:
         request_id=request_id,
         timestamp=now_iso(),
         data=data,
+    )
+
+
+@router.post("/index/publish", response_model=IndexResponse, status_code=202)
+async def publish_index(request: PublishIndexRequest) -> IndexResponse:
+    """전체 배치 구축이 끝난 임시 컬렉션만 명시적으로 발행한다."""
+    request_id = request.request_id or make_request_id()
+    started = perf_counter()
+    try:
+        result = await get_retrieval_service().publish_index(
+            request.collection_name, request.staged_collection_name,
+            expected_count=request.expected_count,
+        )
+    except RetrievalError as exc:
+        return error_response(
+            request_id=request_id,
+            error_code="PROCESSING_ERROR",
+            message=str(exc),
+            status_code=500,
+            retryable=True,
+        )
+    took_ms = int((perf_counter() - started) * 1000)
+    count = int(result["indexed_count"])
+    return IndexResponse(
+        request_id=request_id,
+        timestamp=now_iso(),
+        data=IndexResponseData(
+            indexed_count=count, failed_count=0, collection_name=request.collection_name,
+            elapsed_ms=took_ms, chunk_count=count, index_name=request.collection_name,
+            rebuild=True, records=[], took_ms=took_ms,
+        ),
     )
 
 

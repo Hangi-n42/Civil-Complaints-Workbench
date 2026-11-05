@@ -26,6 +26,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 from scripts.run_v3_evaluation import _pick_embedding_device, chunk_to_case
 from app.core.config import settings
 
@@ -120,7 +122,7 @@ def dense_topk(queries: list[dict], k: int) -> dict[str, list[str]]:
     from sentence_transformers import SentenceTransformer
 
     client = chromadb.PersistentClient(path=settings.CHROMA_DB_PATH)
-    col = client.get_collection(COLLECTION)
+    col = get_active_collection(client, COLLECTION)
     device = _pick_embedding_device()
     print(f"[Dense] BGE-m3 로딩 ({device})...")
     model = SentenceTransformer("BAAI/bge-m3", device=device)

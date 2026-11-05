@@ -4,6 +4,8 @@
 import asyncio, json, os, sys, chromadb
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+
+from app.retrieval.vectorstores.collection_alias import get_active_collection
 from app.retrieval.grounding_filter import score_relevance
 
 MODEL = os.getenv('FILTER_MODEL', 'exaone3.5:7.8b')
@@ -11,7 +13,7 @@ EVAL = os.path.join(ROOT, 'data/evaluation/v3_rebuild')
 hard = [json.loads(l) for l in open(os.path.join(EVAL, 'false_friend_hardset.jsonl'), encoding='utf-8')]
 queries = {q['query_id']: q for q in (json.loads(l) for l in open(os.path.join(EVAL, 'queries.jsonl'))) if q.get('source') == 'civil'}
 
-col = chromadb.PersistentClient(path=os.path.join(ROOT, 'data/chroma_db')).get_collection('civil_cases_v3')
+col = get_active_collection(chromadb.PersistentClient(path=os.path.join(ROOT, 'data/chroma_db')), 'civil_cases_v3')
 got = col.get(include=['documents', 'metadatas'])
 doc, meta = {}, {}
 for sid, d, m in zip(got['ids'], got['documents'], got['metadatas']):

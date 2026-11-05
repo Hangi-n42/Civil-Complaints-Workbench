@@ -4,6 +4,8 @@ dense는 기존 pool 재사용(임베딩 0), 토큰 캐시로 로컬 수분."""
 import json, os, sys, math, statistics, chromadb
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+
+from app.retrieval.vectorstores.collection_alias import get_active_collection
 import app.retrieval.search.hybrid as H
 from kiwipiepy import Kiwi
 kiwi = Kiwi()
@@ -16,7 +18,7 @@ def morph_tok(text):
 H._tokenize = morph_tok
 
 EVAL = os.path.join(ROOT, 'data/evaluation/v3_rebuild')
-col = chromadb.PersistentClient(path=os.path.join(ROOT, 'data/chroma_db')).get_collection('civil_cases_v3')
+col = get_active_collection(chromadb.PersistentClient(path=os.path.join(ROOT, 'data/chroma_db')), 'civil_cases_v3')
 got = col.get(include=['documents', 'metadatas'])
 case_ids, texts, seen = [], [], set()
 for sid, doc, m in zip(got['ids'], got['documents'], got['metadatas']):

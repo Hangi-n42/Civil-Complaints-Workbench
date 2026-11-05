@@ -21,6 +21,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 import chromadb
 
 from app.evaluation.datasets import QrelRecord
@@ -63,7 +65,7 @@ async def main():
     qtext = {q["query_id"]: newq.get(q["query_id"], q["query"]) for q in judged}
 
     # v3 실제 문서 부서
-    col = chromadb.PersistentClient(path=str(PROJECT_ROOT / "data" / "chroma_db")).get_collection(COLL)
+    col = get_active_collection(chromadb.PersistentClient(path=str(PROJECT_ROOT / "data" / "chroma_db")), COLL)
     doc_dept = {}
     for m in col.get(include=["metadatas"])["metadatas"]:
         cid = str(m.get("case_id") or "")

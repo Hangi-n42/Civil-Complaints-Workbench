@@ -24,6 +24,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 from app.core.config import settings
 from app.structuring.enrichment import build_key_terms, normalize_entity_texts
 from app.structuring.legal_dictionary import get_legal_ref_matcher
@@ -117,7 +119,7 @@ def main() -> None:
     import chromadb
 
     client = chromadb.PersistentClient(path=str(args.persist_dir))
-    collection = client.get_collection(args.collection)
+    collection = get_active_collection(client, args.collection)
     total = collection.count()
     limit = min(total, args.limit) if args.limit else total
     batch_size = max(1, int(args.batch_size))

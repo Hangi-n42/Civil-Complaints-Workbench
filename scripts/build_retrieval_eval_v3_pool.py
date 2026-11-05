@@ -24,6 +24,8 @@ except ImportError:
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 DATA_DIR = PROJECT_ROOT / "data" / "evaluation"
 V3_DIR = DATA_DIR / "v3"
 
@@ -106,7 +108,7 @@ def main():
 
     print("[*] ChromaDB 전체 코퍼스 로드 중...")
     client = chromadb.PersistentClient(path=settings.CHROMA_DB_PATH)
-    col = client.get_collection("civil_cases_v1")
+    col = get_active_collection(client, "civil_cases_v1")
     total = col.count()
     print(f"[*] 전체 문서 수: {total}건")
 

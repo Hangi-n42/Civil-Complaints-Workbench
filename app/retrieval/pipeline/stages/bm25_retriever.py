@@ -57,10 +57,14 @@ class BM25RetrieveStage:
         self.tokenizer = tokenizer
         self._retriever = None
         self._doc_ids: list[str] = []
+        self._indexed_collection: str | None = None
 
     def _index_path(self) -> Path:
         """tokenizer 종류별로 다른 경로에 저장하여 충돌을 방지한다."""
-        return self.index_dir / f"{self.collection}_{self.tokenizer}"
+        from app.retrieval.vectorstores.collection_alias import resolve_collection_name
+
+        collection = resolve_collection_name(settings.CHROMA_DB_PATH, self.collection)
+        return self.index_dir / f"{collection}_{self.tokenizer}"
 
     def _tokenize(self, texts: list[str]) -> list[list[str]]:
         if self.tokenizer == "korean":
@@ -68,12 +72,12 @@ class BM25RetrieveStage:
         return _tokenize_whitespace(texts)
 
     def _get_retriever(self):
-        if self._retriever is not None:
+        index_path = self._index_path()
+        if self._retriever is not None and self._indexed_collection == str(index_path):
             return self._retriever
 
         import bm25s
 
-        index_path = self._index_path()
         if index_path.exists():
             self._retriever = bm25s.BM25.load(str(index_path), load_corpus=True)
             self._doc_ids = [doc["id"] for doc in self._retriever.corpus]
@@ -90,6 +94,7 @@ class BM25RetrieveStage:
             self._retriever = retriever
             self._doc_ids = doc_ids
 
+        self._indexed_collection = str(index_path)
         return self._retriever
 
     async def run(self, stage_input: StageInput) -> StageOutput:
@@ -143,9 +148,10 @@ def _load_corpus_from_chroma(collection_name: str) -> tuple[list[str], list[str]
     """ChromaDB에서 전체 문서(chunk_text)와 case_id를 읽어온다."""
     import chromadb
     from app.core.config import settings
+    from app.retrieval.vectorstores.collection_alias import resolve_collection_name
 
     client = chromadb.PersistentClient(path=str(settings.CHROMA_DB_PATH))
-    collection = client.get_collection(collection_name)
+    collection = client.get_collection(resolve_collection_name(settings.CHROMA_DB_PATH, collection_name))
     total = collection.count()
 
     batch_size = 1000

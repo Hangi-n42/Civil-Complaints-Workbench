@@ -2,6 +2,10 @@
 
 민원 원천데이터를 로컬 ChromaDB에 인덱싱하는 절차입니다.
 
+전체 재색인은 기존 자료를 지우지 않고 임시 컬렉션 구축 후 활성 대상을
+전환합니다. 실패·취소·복구 및 단일 writer 범위는
+[안전한 전체 재색인](safe_index_rebuild.md)을 확인하세요.
+
 ---
 
 ## 1. 사전 준비
@@ -54,7 +58,7 @@ python -m uvicorn app.api.main:app --host 127.0.0.1 --port 8000
 
 2) 컬렉션 존재/건수 확인 (터미널 2)
 ```powershell
-python -c "import chromadb; c=chromadb.PersistentClient(path='data/chroma_db').get_collection('civil_cases_v1'); print('count=', c.count())"
+python scripts/inspect_chromadb.py count --collection civil_cases_v1
 ```
 
 `count`가 1 이상이면, 이미 검색 가능한 상태입니다. 이어서 `http://127.0.0.1:8000/docs`에서 `/api/v1/search`를 호출해 결과가 나오는지 확인하세요.

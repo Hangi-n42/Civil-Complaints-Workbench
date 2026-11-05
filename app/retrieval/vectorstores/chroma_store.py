@@ -7,9 +7,11 @@ import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
+from uuid import uuid4
 
 from app.core.config import PROJECT_ROOT, settings
 from app.core.title_builder import build_case_title
+from app.retrieval.vectorstores.collection_alias import activate_collection, has_collection_alias, resolve_collection_name
 
 
 def build_snippet(chunk_text: str, max_length: int = 120) -> str:
@@ -161,9 +163,13 @@ class ChromaVectorStore:
         return self._embedding_model
 
     def _get_collection(self, collection_name: str):
-        key = collection_name.strip() if collection_name else settings.DEFAULT_CHROMA_COLLECTION
+        logical_name = collection_name.strip() if collection_name else settings.DEFAULT_CHROMA_COLLECTION
+        key = resolve_collection_name(self.persist_directory, logical_name)
         if key not in self._collections:
             client = self._get_client()
+            if key != logical_name or has_collection_alias(self.persist_directory, logical_name):
+                self._collections[key] = client.get_collection(name=key)
+                return self._collections[key]
             # 기존 컬렉션은 get_or_create_collection 경로에서 내부 backfill/compactor 동작으로
             # 간헐적인 HNSW 로딩 오류가 발생할 수 있어, 우선 get_collection을 시도한다.
             try:
@@ -177,12 +183,63 @@ class ChromaVectorStore:
 
     def reset_collection(self, collection_name: str) -> None:
         key = collection_name.strip() if collection_name else settings.DEFAULT_CHROMA_COLLECTION
+        key = resolve_collection_name(self.persist_directory, key)
         client = self._get_client()
         try:
             client.delete_collection(key)
         except Exception:
             pass
         self._collections.pop(key, None)
+        client.get_or_create_collection(name=key, metadata={"hnsw:space": "cosine"})
+
+    def publish_collection(
+        self, collection_name: str, staged_collection_name: str, expected_count: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """완료된 임시 컬렉션을 논리 이름에 연결한다. 이전 컬렉션은 보존한다."""
+        key = staged_collection_name.strip()
+        staged = self._get_client().get_collection(name=key)
+        count = int(staged.count())
+        if count == 0:
+            raise ValueError("색인 가능한 문서가 없습니다. 기존 컬렉션을 유지합니다.")
+        if expected_count is not None and count != expected_count:
+            raise ValueError(
+                f"임시 컬렉션 저장 건수가 예상과 다릅니다: expected={expected_count}, actual={count}. "
+                "기존 컬렉션을 유지합니다."
+            )
+        activate_collection(self.persist_directory, collection_name, key)
+        return {"indexed_count": count, "chunk_count": count, "records": []}
+
+    def replace_records(self, collection_name: str, records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+        """별도 컬렉션에 끝까지 저장·검증한 뒤 활성 포인터만 교체한다."""
+        records = list(records)
+        if not records:
+            raise ValueError("색인 가능한 문서가 없습니다. 기존 컬렉션을 유지합니다.")
+        expected_ids = {self._build_unique_id(record) for record in records}
+        if len(expected_ids) != len(records):
+            raise ValueError("재구축 입력에 중복 문서 ID가 있습니다.")
+        client = self._get_client()
+        staged_name = f"rebuild_{uuid4().hex}"
+        staged = client.create_collection(name=staged_name, metadata={"hnsw:space": "cosine"})
+        self._collections[staged_name] = staged
+        results = []
+        try:
+            batch_size = client.get_max_batch_size()
+            for offset in range(0, len(records), batch_size):
+                result = self.upsert_records(staged_name, records[offset:offset + batch_size])
+                results.extend(result.get("records", []))
+            if int(staged.count()) != len(expected_ids) or set(staged.get(include=[])["ids"]) != expected_ids:
+                raise RuntimeError("임시 컬렉션 저장 검증에 실패했습니다.")
+            self.publish_collection(collection_name, staged_name, expected_count=len(expected_ids))
+        except BaseException:
+            # commit 이후 인터럽트가 와도 현재 사용 중인 컬렉션은 지우지 않는다.
+            if resolve_collection_name(self.persist_directory, collection_name) != staged_name:
+                try:
+                    client.delete_collection(staged_name)
+                except Exception:
+                    pass
+                self._collections.pop(staged_name, None)
+            raise
+        return {"indexed_count": len(records), "chunk_count": len(records), "records": results}
 
     def count(self, collection_name: str) -> int:
         collection = self._get_collection(collection_name)

@@ -15,6 +15,8 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 from app.evaluation.datasets import QrelRecord, sha256_file
 from app.evaluation.metrics import RunRecord, evaluate_run, per_query_metric
 
@@ -113,7 +115,7 @@ def run_collection(
     top_k: int,
 ) -> tuple[dict[str, list[RunRecord]], dict[str, Any]]:
     started = time.perf_counter()
-    collection = client.get_collection(collection_name)
+    collection = get_active_collection(client, collection_name)
     count = collection.count()
     result = collection.query(
         query_embeddings=query_embeddings,

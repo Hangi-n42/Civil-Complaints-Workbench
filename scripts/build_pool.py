@@ -2,6 +2,8 @@
 import json, os, sys, chromadb
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+
+from app.retrieval.vectorstores.collection_alias import get_active_collection
 from sentence_transformers import SentenceTransformer
 from app.retrieval.search.hybrid import InvertedBM25
 from app.core.config import settings
@@ -9,7 +11,7 @@ from app.core.config import settings
 TOP = 50
 RRF_K = settings.RRF_K
 
-col = chromadb.PersistentClient(path=os.path.join(ROOT, 'data/chroma_db')).get_collection('civil_cases_v3')
+col = get_active_collection(chromadb.PersistentClient(path=os.path.join(ROOT, 'data/chroma_db')), 'civil_cases_v3')
 got = col.get(include=['documents', 'metadatas'])
 case_ids, texts, seen = [], [], set()
 for sid, doc, meta in zip(got['ids'], got['documents'], got['metadatas']):

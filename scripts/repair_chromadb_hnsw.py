@@ -37,11 +37,13 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+from uuid import uuid4
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from app.core.config import settings
+from app.retrieval.vectorstores.collection_alias import activate_collection, resolve_collection_name
 
 
 def _connect_sqlite(persist_dir: Path) -> sqlite3.Connection:
@@ -58,6 +60,8 @@ def _sqlite_columns(con: sqlite3.Connection, table: str) -> List[str]:
 
 
 def _get_collection_id(con: sqlite3.Connection, collection_name: str) -> Tuple[str, int]:
+    persist_dir = Path(con.execute("pragma database_list").fetchone()[2]).parent
+    collection_name = resolve_collection_name(persist_dir, collection_name)
     cur = con.cursor()
     cur.execute("select id, dimension from collections where name = ?", (collection_name,))
     row = cur.fetchone()
@@ -218,7 +222,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--reset-target",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="True(기본): target 컬렉션 삭제 후 재생성",
+        help="True(기본): 새 물리 컬렉션 복구 성공 후 활성 이름 전환(기존 물리 컬렉션 보존)",
     )
     parser.add_argument(
         "--limit",
@@ -272,14 +276,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         target_dir.mkdir(parents=True, exist_ok=True)
         client = chromadb.PersistentClient(path=str(target_dir))
 
-        if args.reset_target:
-            try:
-                client.delete_collection(target_collection)
-            except Exception:
-                pass
-
+        physical_name = (
+            f"ccw-repair-{uuid4().hex}" if args.reset_target
+            else resolve_collection_name(target_dir, target_collection)
+        )
         collection = client.get_or_create_collection(
-            name=target_collection,
+            name=physical_name,
             metadata={"hnsw:space": "cosine"},
         )
 
@@ -346,6 +348,11 @@ def main(argv: Optional[List[str]] = None) -> int:
             total_written += len(ids)
             if total_written % 2000 < len(ids):
                 print(json.dumps({"status": "progress", "written": total_written}, ensure_ascii=False))
+
+        if args.reset_target:
+            if total_written == 0 or collection.count() != total_written:
+                raise ValueError("복구된 유효 row가 없거나 저장 개수가 일치하지 않아 활성 전환을 중단합니다.")
+            activate_collection(target_dir, target_collection, physical_name)
 
         finished_at = datetime.now().isoformat(timespec="seconds")
         print(

@@ -17,6 +17,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 import scripts.run_v3_evaluation as R
 from scripts.run_v3_evaluation import load_corpus, load_queries, run_bm25, run_dense
 from scripts.eval_noself import get, load_qrels_pooled, metrics, take_top
@@ -53,7 +55,7 @@ def load_meta_map() -> dict[str, dict]:
     """case_id -> reranker 입력용 메타(snippet/summary/title/category/region)."""
     import chromadb
 
-    col = chromadb.PersistentClient(path=settings.CHROMA_DB_PATH).get_collection(COLL)
+    col = get_active_collection(chromadb.PersistentClient(path=settings.CHROMA_DB_PATH), COLL)
     got = col.get(include=["documents", "metadatas"])
     m: dict[str, dict] = {}
     for sid, doc, meta in zip(got["ids"], got["documents"], got["metadatas"]):

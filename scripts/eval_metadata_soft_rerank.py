@@ -23,6 +23,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.retrieval.vectorstores.collection_alias import get_active_collection
+
 import scripts.run_v3_evaluation as R
 from app.core.config import settings
 from app.evaluation.datasets import QrelRecord
@@ -179,7 +181,7 @@ def load_chroma_signal_map(collection_name: str = "civil_cases_v1") -> dict[str,
     import chromadb
 
     client = chromadb.PersistentClient(path=str(settings.CHROMA_DB_PATH))
-    collection = client.get_collection(collection_name)
+    collection = get_active_collection(client, collection_name)
     total = collection.count()
     signals_by_case: dict[str, dict[str, list[str]]] = {}
 
