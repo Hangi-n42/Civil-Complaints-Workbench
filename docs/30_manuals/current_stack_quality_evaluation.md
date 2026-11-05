@@ -14,6 +14,24 @@
 
 ## 준비와 승인 경계
 
+`--inventory`는 로컬 모델 서버의 읽기 전용 목록과 물리 메모리를 기록한 JSON이다. 다음 Mac 예시는 모델을 로드하지 않고 `/api/tags`, `/api/ps`만 조회한다. 출력 파일은 기존 파일을 덮어쓰지 않는다. 다른 환경의 메모리 수집은 별도 확인해야 한다.
+
+```sh
+python - <<'PY'
+import json, subprocess, urllib.request
+from pathlib import Path
+inventory = {}
+for key in ("tags", "ps"):
+    with urllib.request.urlopen("http://127.0.0.1:11434/api/" + key, timeout=5) as response:
+        inventory[key] = json.load(response)["models"]
+inventory["memory"] = subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True).strip()
+path = Path("reports/current-stack-inventory.json")
+path.parent.mkdir(exist_ok=True)
+with path.open("x", encoding="utf-8") as output:
+    json.dump(inventory, output, ensure_ascii=False, indent=2)
+PY
+```
+
 ```sh
 PROMETHEUS_REVISION_MODEL=gemma4:31b-it-q4_K_M \
 OLLAMA_BASE_URL=http://localhost:11434 \
