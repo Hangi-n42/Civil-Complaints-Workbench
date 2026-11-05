@@ -216,4 +216,71 @@ describe("민원별 초안과 편집 보존", () => {
     await refresh();
     expect(host.querySelector("textarea")?.value).toBe("검색 도중 추가한 최신 수정본");
   });
+
+  it.each(["current", "legacy"])("중첩 형식이 잘못된 %s 초안에서도 답변과 편집값을 복원한다", async (version) => {
+    const draft = { complaintId: "A", answer: "유효한 생성 답변", structuredOutput: {
+      summary: "유효한 요약", requestSegments: "잘못된 문자열 형식", actionItems: ["유효한 조치"],
+    } };
+    const key = version === "legacy" ? "workbench-last-draft" : "workbench-last-draft:A";
+    const raw = JSON.stringify(version === "legacy" ? { draft } : {
+      complaintId: "A", draft, editorValue: "유효한 편집값", searchQuery: "", searchBundle: null, draftQueryHash: null,
+    });
+    window.localStorage.setItem(key, raw);
+
+    await mount();
+
+    expect(host.querySelector("textarea")?.value).toBe(version === "legacy" ? draft.answer : "유효한 편집값");
+    expect(loadLastDraft("A")?.draft).toMatchObject({ answer: draft.answer, structuredOutput: {
+      summary: "유효한 요약", requestSegments: [], actionItems: ["유효한 조치"],
+    } });
+    expect(window.localStorage.getItem(key)).toBe(raw);
+  });
+
+  it("잘못된 검색 근거 항목만 제외하고 편집값과 정상 근거는 복원한다", async () => {
+    const valid = bundle("검색", "A");
+    const docs = [null, { ...valid.results[0], caseId: {} }, valid.results[0]];
+    window.localStorage.setItem("workbench-last-draft:A", JSON.stringify({
+      complaintId: "A", draft: { complaintId: "A", answer: "유효한 생성 답변" },
+      editorValue: "유효한 편집값", searchQuery: "검색", draftQueryHash: null,
+      searchBundle: { ...valid, results: docs, retrievedDocs: docs, searchResults: docs },
+    }));
+
+    await mount();
+
+    expect(host.querySelector("textarea")?.value).toBe("유효한 편집값");
+    expect(host.textContent).toContain("A 근거");
+    expect(loadLastDraft("A")?.searchBundle).toMatchObject({
+      results: valid.results, retrievedDocs: valid.retrievedDocs, searchResults: valid.searchResults,
+    });
+  });
+
+  it("요약·조치·요청별 답변의 잘못된 형식은 제외하고 정상 보조 데이터는 유지한다", async () => {
+    const validCard = { index: 0, requestSegment: "유효 요청", answer: "유효 개별 답변", caseIds: ["A 근거"], hasEvidence: true };
+    window.localStorage.setItem("workbench-last-draft", JSON.stringify({ draft: {
+      complaintId: "A", answer: "유효한 생성 답변", structuredOutput: {
+        summary: { invalid: true }, actionItems: [null, "유효 조치", {}], requestSegments: ["유효 요청", {}],
+        segmentAnswers: [null, { ...validCard, caseIds: null }, { ...validCard, answer: {} }, validCard],
+      },
+    } }));
+
+    await mount();
+
+    expect(host.querySelector("textarea")?.value).toBe("유효한 생성 답변");
+    expect(host.textContent).toContain("유효 개별 답변");
+    expect(loadLastDraft("A")?.draft?.structuredOutput).toEqual({
+      summary: undefined, actionItems: ["유효 조치"], requestSegments: ["유효 요청"], segmentAnswers: [validCard],
+    });
+  });
+
+  it("보조 검색 정보와 편집값이 잘못되어도 유효한 생성 answer는 남긴다", async () => {
+    window.localStorage.setItem("workbench-last-draft:A", JSON.stringify({
+      complaintId: "A", draft: { complaintId: "A", answer: "유효한 생성 답변" },
+      editorValue: {}, searchQuery: "검색", searchBundle: { query: "검색" }, draftQueryHash: null,
+    }));
+
+    await mount();
+
+    expect(host.querySelector("textarea")?.value).toBe("유효한 생성 답변");
+    expect(loadLastDraft("A")?.searchBundle).toBeNull();
+  });
 });
