@@ -1,0 +1,131 @@
+{
+  "schema_version": "current_stack_quality_cases_v1",
+  "exposure": "previously_exposed_development_cases; not holdout",
+  "cases": [
+    {
+      "case_id": "Q16-MULTI",
+      "source": {
+        "kind": "previously_exposed_development_query_and_saved_search_references",
+        "historical_file": "service_result.json",
+        "historical_sha256": "b25c17cfcd205bb51589e44504155e74b64a26d8ce3f9d6392dcba24301dc0fc",
+        "selected_fields": "input.query + search.body.data.results only",
+        "request_construction": "평가용 request/complaint ID와 routing trace는 고정한 API 입력이며 새 검색·라우팅 측정값이 아니다. 근거 score는 과거 저장 결과에서 가져온다."
+      },
+      "request": {
+        "request_id": "QUALITY-Q16-MULTI",
+        "complaint_id": "Q16-MULTI",
+        "query": "학교 앞 불법 주정차로 아이들 시야가 가려집니다. 첫째, 등하교 시간대 주정차 단속을 요청합니다. 둘째, 횡단보도 앞 과속방지턱 설치 가능 여부를 알려주세요. 셋째, 고장 난 가로등 수리를 요청합니다. 넷째, 각 요청의 담당 부서와 접수 방법을 안내해 주세요.",
+        "routing_hint": {
+          "strategy_id": "topic_traffic_medium_v1",
+          "route_key": "traffic/medium",
+          "top_k": 3
+        },
+        "routing_trace": {
+          "topic_type": "traffic",
+          "complexity_level": "medium",
+          "complexity_score": 0.7,
+          "request_segments": [
+            "첫째, 등하교 시간대 주정차 단속을 요청합니다.",
+            "둘째, 횡단보도 앞 과속방지턱 설치 가능 여부를 알려주세요.",
+            "셋째, 고장 난 가로등 수리를 요청합니다.",
+            "넷째, 각 요청의 담당 부서와 접수 방법을 안내해 주세요."
+          ],
+          "route_reason": "frozen previous development input",
+          "route_key": "traffic/medium",
+          "strategy_id": "topic_traffic_medium_v1",
+          "complexity_trace": {
+            "intent_count": 4,
+            "constraint_count": 0,
+            "entity_diversity": 1,
+            "policy_reference_count": 0,
+            "cross_sentence_dependency": false
+          }
+        },
+        "use_search_results": true,
+        "search_results": [
+          {
+            "doc_id": "CASE-70121",
+            "case_id": "CASE-70121",
+            "chunk_id": "CASE-70121__chunk-7",
+            "snippet": "일 차선 도로에서 중앙 가드레일이 있고 중앙선이 실선이 아닌 상태로, 화물차, 캠핑카, 일반차량의 불법 주차로 인해 학생들의 안전이 위협받고 있으며, 사고 위험이 높음. 학생들의 안전이 위협받고, 횡단보도 이용 시 시야 확보가 어려워 사고 위험이 증가하고 있음. 해당 지역의 불법 주차 단속 강화 및 주정차 금지구역 지정 요청. 특히 학교 개학 전 단속 조치를 취해줄 것을 요청함. 학교 앞 도로의 특성상 학생들의 등하굣길이 주 통행로이며, 주차 차량으로 인해 교통 안전이 심각하게 저해되고 있음. 도로의 구조적 한계에도 불구하고 안전 문제 해결을 위한 적극적인 조치가 필요함.",
+            "score": 0.029199
+          },
+          {
+            "doc_id": "CASE-800077",
+            "case_id": "CASE-800077",
+            "chunk_id": "CASE-800077__chunk-0",
+            "snippet": "지하보도 앞 횡단보도에서 고속으로 질주하는 자전거와 행인 간 충돌 위험이 빈번함 사고 발생으로 인한 인명 피해 위험 횡단보도 양옆에 과속방지턱 설치 및 펌프식 횡단보도 조성 학생들의 통학로로서 안전 시설물 설치 요청이 있으며, 경찰서에서도 안전 시설물 설치를 권장하고 있음",
+            "score": 0.032787
+          },
+          {
+            "doc_id": "CASE-000626",
+            "case_id": "CASE-000626",
+            "chunk_id": "CASE-000626__chunk-1",
+            "snippet": "가로등 고장 주민 통행 위험 빠른 시일 내 수리 요청 한남동 보안등 수리 요청 건에 대한 조치 완료 안내",
+            "score": 0.031754
+          }
+        ]
+      },
+      "human_review_checks": [
+        "네 요청의 보존",
+        "과거 수리 사례를 현재 조치 약속으로 바꾸지 않는지",
+        "자료에 없는 부서 차이·접수 경로를 단정하지 않는지",
+        "구조화 인용과 주장 지원 구분",
+        "문의·감사 반복"
+      ]
+    },
+    {
+      "case_id": "Q16-SCHEDULE",
+      "source": {
+        "kind": "synthetic_development_fixture_from_previous_evaluation",
+        "historical_file": "cases.json:feedback_promise.source",
+        "historical_sha256": "14c465dd481ba7f05d2d0e09cc61cd8e9e94f0fd13da27e13b937f8736bce20a",
+        "selected_fields": "complaint_text + references only; generated_answer/citations/expected/rubric excluded",
+        "request_construction": "원본은 promise_bad 테스트용 업무 안내 fixture다. request/complaint ID·routing trace·필수 score=0.9는 평가용 고정 입력이며 검색/라우팅 측정값이나 실제 민원 관찰 사실이 아니다."
+      },
+      "request": {
+        "request_id": "QUALITY-Q16-SCHEDULE",
+        "complaint_id": "Q16-SCHEDULE",
+        "query": "파손된 도로는 언제 보수되나요?",
+        "routing_hint": {
+          "strategy_id": "topic_traffic_low_v1",
+          "route_key": "traffic/low",
+          "top_k": 1
+        },
+        "routing_trace": {
+          "topic_type": "traffic",
+          "complexity_level": "low",
+          "complexity_score": 0.2,
+          "request_segments": [
+            "파손된 도로는 언제 보수되나요?"
+          ],
+          "route_reason": "frozen previous development input",
+          "route_key": "traffic/low",
+          "strategy_id": "topic_traffic_low_v1",
+          "complexity_trace": {
+            "intent_count": 1,
+            "constraint_count": 0,
+            "entity_diversity": 1,
+            "policy_reference_count": 0,
+            "cross_sentence_dependency": false
+          }
+        },
+        "use_search_results": true,
+        "search_results": [
+          {
+            "doc_id": "DOC-ROAD",
+            "case_id": "DOC-ROAD",
+            "chunk_id": "DOC-ROAD__chunk-0",
+            "snippet": "도로 보수 시기는 현장 점검 후 결정합니다. 현재 보수 일정은 확정되지 않았습니다. 점검 결과와 일정은 담당부서가 신청인에게 안내합니다.",
+            "score": 0.9
+          }
+        ]
+      },
+      "human_review_checks": [
+        "일정 미확정 유지",
+        "점검 이후 결정과 완료 보장의 구분",
+        "없는 일정·부서·법령·연락처를 추가하지 않는지"
+      ]
+    }
+  ]
+}
