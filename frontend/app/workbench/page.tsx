@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppSidebar from "@/components/AppSidebar";
 import {
@@ -72,6 +72,7 @@ type WorkbenchCase = AssignedCase & {
 };
 
 type PersistedRoutingInfo = {
+  complaintId?: string;
   routingTrace?: RoutingTrace;
   strategyId?: string | null;
   routeKey?: string | null;
@@ -88,6 +89,8 @@ type DraftSnapshot = {
     answer?: string;
   };
 };
+
+type CaseRequest = { caseId: string; controller: AbortController };
 
 type DepartmentTrack = {
   admin_unit: string;
@@ -121,7 +124,7 @@ function WorkbenchContent() {
   const [searchStage, setSearchStage] = useState<SearchStage>("empty");
   const [searchBundle, setSearchBundle] = useState<SearchResponseData | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [routingTrace, setRoutingTrace] = useState<RoutingTrace | null>(null);
+  const [, setRoutingTrace] = useState<RoutingTrace | null>(null);
   const [routingHint, setRoutingHint] = useState<RoutingHint | null>(null);
   const [, setStrategyId] = useState<string | null>(null);
   const [, setRouteKey] = useState<string | null>(null);
@@ -134,6 +137,9 @@ function WorkbenchContent() {
   const [draftQueryHash, setDraftQueryHash] = useState<string | null>(null);
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
   const [isRawCollapsed, setIsRawCollapsed] = useState(false);
+  const activeCaseId = useRef(selectedCaseId);
+  const searchRequest = useRef<CaseRequest | null>(null);
+  const draftRequest = useRef<CaseRequest | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -170,6 +176,16 @@ function WorkbenchContent() {
   const caseContext = useMemo<WorkbenchCaseContext>(() => {
     return buildCaseContext(selectedCase);
   }, [selectedCase]);
+
+  useEffect(() => {
+    activeCaseId.current = selectedCase.case_id;
+    return () => {
+      searchRequest.current?.controller.abort();
+      draftRequest.current?.controller.abort();
+      searchRequest.current = null;
+      draftRequest.current = null;
+    };
+  }, [selectedCase.case_id]);
 
   useEffect(() => {
     if (caseList.length === 0) {
@@ -234,7 +250,7 @@ function WorkbenchContent() {
       setRouteKey(defaultInfo.routeKey);
 
       // Override with persisted routing info if available
-      if (persisted && persisted.routingTrace) {
+      if (persisted?.complaintId === selectedCase.case_id && persisted.routingTrace) {
         setRoutingTrace(persisted.routingTrace);
         setStrategyId(persisted.strategyId || null);
         setRouteKey(persisted.routeKey || null);
@@ -261,6 +277,11 @@ function WorkbenchContent() {
     if (caseId === selectedCaseId) {
       return;
     }
+    activeCaseId.current = caseId;
+    searchRequest.current?.controller.abort();
+    draftRequest.current?.controller.abort();
+    searchRequest.current = null;
+    draftRequest.current = null;
     setSelectedCaseId(caseId);
     router.replace(`/workbench?case_id=${encodeURIComponent(caseId)}`);
   }
@@ -284,6 +305,10 @@ function WorkbenchContent() {
   // 유사 민원 검색을 실행하고 결과 번들을 반환한다.
   // /qa가 검색 단계의 routing_hint를 필수로 요구하므로 초안 생성에서도 재사용한다.
   async function runSearch(): Promise<SearchResponseData | null> {
+    searchRequest.current?.controller.abort();
+    const request = { caseId: selectedCase.case_id, controller: new AbortController() };
+    searchRequest.current = request;
+    const isCurrent = () => searchRequest.current === request && activeCaseId.current === request.caseId && !request.controller.signal.aborted;
     const query = searchQuery.trim();
     const effectiveQuery = query || buildDefaultQuery(selectedCase).trim();
     if (!effectiveQuery) {
@@ -303,7 +328,10 @@ function WorkbenchContent() {
       query: effectiveQuery,
       topK: 5,
       caseContext,
+      signal: request.controller.signal,
     });
+
+    if (!isCurrent()) return null;
 
     if (response.error) {
       setSearchStage("error");
@@ -325,10 +353,17 @@ function WorkbenchContent() {
   }
 
   async function handleSearch() {
+    draftRequest.current?.controller.abort();
+    draftRequest.current = null;
+    setDraftStage(draftResponse ? "success" : "idle");
     await runSearch();
   }
 
   async function handleGenerateDraft() {
+    draftRequest.current?.controller.abort();
+    const request = { caseId: selectedCase.case_id, controller: new AbortController() };
+    draftRequest.current = request;
+    const isCurrent = () => draftRequest.current === request && activeCaseId.current === request.caseId && !request.controller.signal.aborted;
     setDraftStage("loading");
     setDraftError(null);
     setDraftProgressStep(0);
@@ -337,11 +372,14 @@ function WorkbenchContent() {
       // 검색이 선행되지 않았으면 유사 민원 검색을 자동으로 먼저 수행한다.
       // (/qa는 검색이 만들어내는 routing_hint가 없으면 400으로 실패하기 때문이다.)
       let bundle = searchBundle;
-      if (!bundle || !routingHint) {
+      const effectiveQuery = searchQuery.trim() || buildDefaultQuery(selectedCase).trim();
+      if (!bundle || !routingHint || bundle.query.trim() !== effectiveQuery) {
         bundle = await runSearch();
       }
 
-      const effectiveRoutingHint = bundle?.routingHint || routingHint || undefined;
+      if (!isCurrent()) return;
+
+      const effectiveRoutingHint = bundle?.routingHint;
       if (!effectiveRoutingHint) {
         setDraftStage("error");
         setDraftError("유사 민원 검색에 실패해 초안을 생성할 수 없습니다. 잠시 후 다시 시도해주세요.");
@@ -349,20 +387,23 @@ function WorkbenchContent() {
       }
 
       // 초안을 만든 쿼리를 stale 검사용으로 기억해 둔다(아래 성공 분기에서 해시 저장).
-      const generationQuery = bundle?.query || searchQuery || buildDefaultQuery(selectedCase);
+      const generationQuery = bundle?.query || effectiveQuery;
       const response = await streamQaApi(
         {
-          complaintId: selectedCase.case_id,
+          complaintId: request.caseId,
           query: generationQuery,
           routingHint: effectiveRoutingHint,
-          routingTrace: bundle?.routingTrace || routingTrace || undefined,
+          routingTrace: bundle?.routingTrace,
           useSearchResults: Boolean(bundle?.results?.length || bundle?.searchResults?.length),
           searchResults: bundle?.results || bundle?.searchResults || [],
           caseContext,
+          signal: request.controller.signal,
         },
         // 백엔드가 보내는 실제 단계로 진행도를 갱신한다.
-        (stage) => setDraftProgressStep(QA_STAGE_TO_STEP[stage] ?? 0),
+        (stage) => { if (isCurrent()) setDraftProgressStep(QA_STAGE_TO_STEP[stage] ?? 0); },
       );
+
+      if (!isCurrent()) return;
 
       if (response.error) {
         setDraftStage("error");
@@ -374,8 +415,13 @@ function WorkbenchContent() {
       setDraftResponse(response.data);
       setDraftQueryHash(hashQuery(generationQuery));
       // Save draft snapshot for before/after comparison
-      saveDraftSnapshot(response.data);
+      try {
+        saveDraftSnapshot({ ...response.data, complaintId: request.caseId });
+      } catch {
+        if (isCurrent()) setDraftError("초안은 생성됐지만 이 브라우저에 저장하지 못했습니다.");
+      }
     } catch (error: unknown) {
+      if (!isCurrent()) return;
       setDraftStage("error");
       setDraftError(error instanceof Error ? error.message : "초안 생성 중 오류가 발생했습니다.");
     }
