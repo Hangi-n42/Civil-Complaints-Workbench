@@ -16,6 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.complaint_intelligence.config import get_complaint_intelligence_config
+from app.complaint_intelligence.provenance import seed_source_provenance
 from app.complaint_intelligence.pii import mask_pii
 from app.complaint_intelligence.schemas import ComplaintIntelligenceEvent, PublicAgencyInsight
 from app.complaint_intelligence.service import ComplaintIntelligenceService
@@ -69,7 +70,7 @@ def main() -> int:
         mode=str(seed.get("mode") or "replay"),
         source_name=str(seed.get("source_name") or "complaint_intelligence_demo"),
         as_of=datetime.fromisoformat(str(seed.get("as_of"))),
-        metadata={"trigger": "demo_seed", "seed_file": str(args.seed)},
+        metadata={"trigger": "demo_seed", "seed_file": str(args.seed), "source_provenance": seed_source_provenance(seed)},
     )
 
     alerts = service.list_issue_alerts()

@@ -15,6 +15,7 @@ import { HotspotMap } from "@/components/intelligence/HotspotMap";
 import { InsightDetailPanel } from "@/components/intelligence/InsightDetailPanel";
 import { IssueAlertList } from "@/components/intelligence/IssueAlertList";
 import { PublicInsightList } from "@/components/intelligence/PublicInsightList";
+import { ProvenancePanel } from "@/components/intelligence/ProvenancePanel";
 import { countGroupsLinkedToAlert, duplicateGroupTitle } from "@/components/intelligence/duplicateMerge";
 import { sortInsightsByPriority } from "@/components/intelligence/insight";
 import { findById } from "@/components/intelligence/links";
@@ -34,7 +35,7 @@ type ImmediateAction = {
 };
 
 const TABS: Array<{ id: ActiveIntelTab; label: string }> = [
-  { id: "issue_alerts", label: "실시간 이슈" },
+  { id: "issue_alerts", label: "이슈 경보" },
   { id: "public_insights", label: "행정 인사이트" },
   { id: "duplicate_groups", label: "중복 병합" },
 ];
@@ -115,9 +116,9 @@ export default function IntelligencePage() {
   );
   const monitoringContext = summary
     ? [
-        summary.as_of ? `관제 기준 ${shortTs(summary.as_of)}` : null,
-        summary.latest_event_at ? `마지막 관측 ${shortTs(summary.latest_event_at)}` : null,
-        summary.event_count != null ? `전체 관측 ${summary.event_count}건` : null,
+        summary.as_of ? `분석 기준 ${shortTs(summary.as_of)}` : null,
+        summary.latest_event_at ? `마지막 자료 시각 ${shortTs(summary.latest_event_at)}` : null,
+        summary.event_count != null ? `저장 이벤트 ${summary.event_count}건` : null,
       ]
         .filter(Boolean)
         .join(" · ")
@@ -213,7 +214,7 @@ export default function IntelligencePage() {
                     disabled={loading || refreshing}
                     className="rounded-md border border-slate-300 bg-slate-900 px-3 py-2 text-xs font-extrabold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
                   >
-                    {refreshing ? "갱신 중" : "새로고침"}
+                    {refreshing ? "조회 중" : "저장 결과 다시 조회"}
                   </button>
                 </div>
               </div>
@@ -233,6 +234,8 @@ export default function IntelligencePage() {
                 </div>
               )}
             </section>
+
+            {!loading && <ProvenancePanel operation={data?.operation ?? "stored_read"} runs={data?.provenance_runs ?? []} />}
 
             {errorMsg && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
@@ -357,7 +360,7 @@ export default function IntelligencePage() {
                         )}
                       </div>
                     ) : (
-                      <EmptyState text={data?.empty_state?.issue_alerts ?? "표시할 실시간 이슈가 없습니다."} />
+                      <EmptyState text={data?.empty_state?.issue_alerts ?? "표시할 이슈 경보가 없습니다."} />
                     )
                   ) : activeTab === "duplicate_groups" ? (
                     <DuplicateGroupTriage

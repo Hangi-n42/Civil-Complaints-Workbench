@@ -16,6 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.complaint_intelligence.duplicate_merger.service import DuplicateMergeConflict
 from app.complaint_intelligence.schemas import ComplaintIntelligenceEvent
+from app.complaint_intelligence.provenance import seed_source_provenance
 from scripts.seed_complaint_intelligence_demo import build_service, contains_unmasked_pii, write_report
 
 
@@ -62,7 +63,8 @@ def run_duplicate_merge_demo(
         mode=str(seed["mode"]),
         source_name=SOURCE_NAME,
         as_of=as_of,
-        metadata={"trigger": "duplicate_merge_demo_seed", "seed_file": str(seed_path)},
+        metadata={"trigger": "duplicate_merge_demo_seed", "seed_file": str(seed_path),
+                  "source_provenance": {**seed_source_provenance(seed, built_scenarios=True), "source_policies": ["synthetic_scenario"]}},
     )
     groups = service.run_duplicate_analysis(
         events,
