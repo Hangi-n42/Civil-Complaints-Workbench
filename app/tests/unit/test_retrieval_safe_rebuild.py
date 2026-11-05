@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 
 import pytest
@@ -255,6 +256,41 @@ async def test_missing_active_collection_fails_closed(service_and_store):
     with pytest.raises(Exception, match="does not exist"):
         store.count("safe_rebuild_test")
     assert len(store._get_client().list_collections()) == 1
+
+
+@pytest.mark.asyncio
+async def test_missing_original_collection_after_rollback_fails_closed(service_and_store):
+    service, store = service_and_store
+    logical_name = "safe_rebuild_test"
+    await service.index_documents(
+        [{"case_id": "CASE-NEW", "text": "폐기물 처리"}],
+        rebuild=True, collection_name=logical_name,
+    )
+    await service.publish_index(logical_name, logical_name)
+    pointer = next((store.persist_directory / "collection_aliases").glob("*.json"))
+    assert json.loads(pointer.read_text())["active_name"] == logical_name
+    fresh = ChromaVectorStore(str(store.persist_directory), "unused-test-model", "cpu")
+    assert fresh.count(logical_name) == 1
+    assert fresh._get_collection(logical_name).get(include=["metadatas"])["metadatas"][0]["case_id"] == "CASE-OLD"
+
+    client = store._get_client()
+    client.delete_collection(logical_name)
+    before = {collection.name for collection in client.list_collections()}
+    fresh = ChromaVectorStore(str(store.persist_directory), "unused-test-model", "cpu")
+    with pytest.raises(Exception, match="does not exist"):
+        fresh.count(logical_name)
+    assert {collection.name for collection in client.list_collections()} == before
+
+
+def test_unaliased_database_still_allows_new_collection(service_and_store, monkeypatch):
+    _, store = service_and_store
+    fresh = ChromaVectorStore(str(store.persist_directory), "unused-test-model", "cpu")
+    monkeypatch.setattr(fresh, "embed_texts", lambda texts: [[1.0, 0.0] for _ in texts])
+    assert fresh.count("unaliased_new") == 0
+    fresh.upsert_records("unaliased_new", [{
+        "doc_id": "CASE-RAW", "case_id": "CASE-RAW", "chunk_id": "chunk-0", "chunk_text": "합성 자료",
+    }])
+    assert fresh.count("unaliased_new") == 1
 
 
 def test_bulk_api_distinguishes_rejected_input_storage_failure_and_success(service_and_store, monkeypatch):

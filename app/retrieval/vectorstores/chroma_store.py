@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from app.core.config import PROJECT_ROOT, settings
 from app.core.title_builder import build_case_title
-from app.retrieval.vectorstores.collection_alias import activate_collection, resolve_collection_name
+from app.retrieval.vectorstores.collection_alias import activate_collection, has_collection_alias, resolve_collection_name
 
 
 def build_snippet(chunk_text: str, max_length: int = 120) -> str:
@@ -167,7 +167,7 @@ class ChromaVectorStore:
         key = resolve_collection_name(self.persist_directory, logical_name)
         if key not in self._collections:
             client = self._get_client()
-            if key != logical_name:
+            if key != logical_name or has_collection_alias(self.persist_directory, logical_name):
                 self._collections[key] = client.get_collection(name=key)
                 return self._collections[key]
             # 기존 컬렉션은 get_or_create_collection 경로에서 내부 backfill/compactor 동작으로

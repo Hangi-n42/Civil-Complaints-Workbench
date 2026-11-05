@@ -20,6 +20,11 @@ def _alias_path(persist_directory: str | Path, collection_name: str) -> Path:
     return Path(persist_directory) / "collection_aliases" / f"{key}.json"
 
 
+def has_collection_alias(persist_directory: str | Path, collection_name: str) -> bool:
+    """원래 물리 이름으로 복구된 포인터도 기존 DB 생성 경로와 구분한다."""
+    return _alias_path(persist_directory, collection_name.strip()).exists()
+
+
 def resolve_collection_name(persist_directory: str | Path, collection_name: str) -> str:
     """포인터가 없는 기존 DB는 원래 이름을 사용하고 손상된 포인터는 거절한다."""
     collection_name = collection_name.strip()
