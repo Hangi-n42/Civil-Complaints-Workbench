@@ -1,7 +1,7 @@
 # 현재 데이터 계약
 
 - 문서 상태: canonical
-- 최종 확인일: 2026-06-21
+- 관제 실행 출처 대조 2026-11-06 · `8e9de051`
 - 기준 코드:
   - `app/api/schemas/retrieval.py`
   - `app/api/schemas/generation.py`
@@ -106,6 +106,21 @@ PII 원칙:
 
 - `body`, `masked_text`, `reviewer_feedback`, `structured_elements`, `request_segments`, `entity_texts`는 validator에서 마스킹됩니다.
 - PublicAgencyInsight와 EvidencePack에는 masked text만 전달해야 합니다.
+
+## 관제 실행 출처
+
+`SourceProvenance`는 분석 요청의 선택 필드 `source_provenance`, 실행 응답의 `provenance.source`, 대시보드의 `provenance_runs[].source`에 사용합니다. 준비자가 제공한 입력 기준을 담으며 원문 진위는 별도 검토 대상입니다.
+
+| 필드 | 의미 |
+|---|---|
+| `source_policies`, `source_datasets` | 출처 정책과 자료 명칭의 문자열 목록 |
+| `time_basis` | `scenario_replay` 또는 `unknown` |
+| `location_basis` | `scenario_assigned` 또는 `unknown` |
+| `structured_fields_basis` | `scenario_template` 또는 `unknown` |
+
+`RunProvenance`에는 실행 ID·모드·상태·기록 시각·분석 기준 시각, `source`, `generation_methods`가 들어갑니다. 생성 방식은 저장된 성공·대체 생성 지표에 따라 `simulated`(fake), `local_model`, `template`, `not_run`, `unknown`으로 표시합니다. 생성 성공과 대체 생성이 함께 기록된 실행은 두 값을 담을 수 있습니다. `provider`, `provider_class`, `model`, `llm_attempt_count`, `fallback_count`의 미확인 값은 `null`입니다.
+
+출처 정보가 없는 기존 실행은 빈 목록과 `unknown`으로 표시합니다. 대시보드의 `provenance_runs`는 최근 실행 목록이며 개별 카드와 실행의 연결은 미확인입니다. 실제 타입과 변환은 [provenance.py](../../../app/complaint_intelligence/provenance.py)에 있습니다.
 
 ## IssueAlert
 

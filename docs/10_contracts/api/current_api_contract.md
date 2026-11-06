@@ -1,11 +1,12 @@
 # 현재 API 계약
 
 - 문서 상태: canonical
-- 최종 확인일: 2026-06-21
+- 라우터·실행 출처 대조 2026-11-06 · `8e9de051`
 - 기준 코드:
   - `app/api/routers/retrieval.py`
   - `app/api/routers/generation.py`
   - `app/api/routers/complaint_intelligence.py`
+  - `app/api/main.py`, `app/api/routers/ui.py`, `app/api/routers/admin.py`
   - `app/api/schemas/retrieval.py`
   - `app/api/schemas/generation.py`
 - 관련 문서:
@@ -27,6 +28,18 @@
 ```
 
 오류 응답은 endpoint별로 FastAPI validation error 또는 공통 error response를 사용할 수 있습니다. Duplicate Merge 상태 전이 충돌은 `409`와 함께 `DUPLICATE_GROUP_*` 계열 code를 반환합니다.
+
+## 로컬 실행 후 조회
+
+[독립 실행 안내](../../30_manuals/local_dev_runbook.md)의 profile은 API `127.0.0.1:8092`와 화면 `127.0.0.1:3092`를 사용합니다. API의 `/docs`에서 등록된 라우터를 확인할 수 있습니다.
+
+| 요청 | 확인 범위 |
+|---|---|
+| `GET /api/v1/health` | JSON 최상위의 `status=ok`, `service`, `version`으로 API 응답 확인 |
+| `GET /api/v1/ui/cases` | `UI_CASES_DATA_PATH`의 케이스를 `data.count`, `data.cases`로 조회 |
+| `GET /api/v1/admin/overview` | 활성 컬렉션 통계. `year`와 반복 `category` 쿼리를 지원 |
+
+색인 변경은 `POST /api/v1/index`와 `POST /api/v1/index/publish`에서 수행합니다. 저장과 활성 이름 전환의 경계, 복구는 [재색인 안내](../../30_manuals/safe_index_rebuild.md)에 있습니다.
 
 ## Search/QA
 
@@ -65,9 +78,8 @@
 요청 주요 필드:
 
 - `request_id`: 선택
-- `complaint_id`: 선택
-- `query`: 필수
-- `routing_hint`: 선택
+- `complaint_id`와 `query`는 필수입니다.
+- `routing_hint`는 필수입니다. 앞선 검색의 `strategy_id`, `route_key`, `top_k`, `snippet_max_chars`를 전달합니다.
 - `routing_trace`: 선택
 - `top_k`: 기본 5
 - `filters`: 선택
@@ -75,6 +87,8 @@
 - `use_search_results`: 기본 false
 - `search_results`: `use_search_results=true`일 때 최소 1건 필요
 - `context_window_policy`: 선택
+
+QA 라우터는 민원 ID와 라우팅을 검사합니다. 누락, `topic/complexity` 형식 위반, hint와 trace의 경로·전략 불일치는 검증 오류입니다. 비스트림 요청에서는 처리 단계의 검증 오류를 HTTP 400으로 반환합니다.
 
 응답 `data` 주요 필드:
 
@@ -94,11 +108,11 @@
 
 ### `POST /api/v1/qa/stream`
 
-역할: `/api/v1/qa`와 같은 요청을 받고 SSE로 stage/done event를 반환합니다.
+`/api/v1/qa`와 같은 요청을 받고 같은 QA 처리 경로의 진행 상태와 결과를 SSE로 반환합니다.
 
 대표 event:
 
-- `stage`: retrieving, grounding, generating 등
+- `stage`에는 `retrieving`, `grounding`, `generating` 중 실행 단계와 `label`이 들어갑니다.
 - `done`: 최종 QAResponse envelope
 - `error`: 실패 envelope
 
@@ -117,6 +131,7 @@ Complaint Intelligence endpoint는 `/api/v1` prefix를 사용하지 않습니다
 - `mode`: 선택. `realtime`, `replay`, `manual` 중 하나로 정규화
 - `source_name`: 선택
 - `as_of`: 선택
+- `source_provenance`는 선택 필드입니다. 입력에서 확인한 출처 정책·시각·좌표·구조화 기준을 전달합니다. [출처 데이터 계약](../data/current_data_contract.md#관제-실행-출처)에 형태를 정의합니다.
 
 응답 `data`:
 
@@ -130,6 +145,7 @@ Complaint Intelligence endpoint는 `/api/v1` prefix를 사용하지 않습니다
 - `public_insight_count`
 - `alerts`
 - `public_insights`
+- `provenance`에는 저장된 해당 실행의 출처가 들어갑니다. 실행 기록을 찾을 수 없는 경우 `null`입니다.
 
 ### `POST /complaint-intelligence/public-insights/run-analysis`
 
@@ -141,12 +157,12 @@ Complaint Intelligence endpoint는 `/api/v1` prefix를 사용하지 않습니다
 
 query:
 
-- `limit`: 기본 20, 최대값은 코드에서 제한
+- `limit`의 기본값은 20이며 범위는 1~100입니다.
 
 응답 `data`:
 
 - `count`
-- `analysis_runs[]`: `run_id`, `mode`, `status`, `source_name`, `event_count`, `started_at`, `completed_at`, `as_of`, `metadata`
+- `analysis_runs[]`에 `run_id`, `mode`, `status`, `source_name`, `event_count`, `started_at`, `completed_at`, `as_of`, `metadata`, `provenance`가 들어갑니다.
 
 ### Scheduler/Collector
 
@@ -173,10 +189,12 @@ query:
 - `issue_alerts`
 - `public_insights`
 - `empty_state`
+- `operation`은 `stored_read`입니다.
+- `provenance_runs`는 최근 저장 실행 최대 5개의 출처입니다. 개별 카드와 실행 기록의 대응은 미확인입니다.
 
 ### `POST /complaint-intelligence/dashboard/run-analysis`
 
-역할: 입력 events로 분석을 실행하고 응답은 `GET /dashboard`와 같은 형태로 반환합니다.
+`run-analysis`와 같은 입력으로 분석을 실행합니다. 응답은 대시보드 형태이며 `data.operation`은 `new_analysis`입니다. `provenance_runs`는 조회 응답과 같은 최근 실행 목록입니다.
 
 ## IssueAlert/PublicAgencyInsight 조회
 
