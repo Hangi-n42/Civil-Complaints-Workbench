@@ -1,9 +1,9 @@
 # 계약 문서
 
 - 문서 상태: canonical
-- 문서 버전: v2.0
-- 문서 분류·링크 정리일: 2026-09-26
-- 하위 문서 전체의 구현 일치 여부를 이번에 재검증한 것은 아님
+- 문서 버전 v2.1
+- 현행 대조 2026-11-06 · `8e9de051`
+- 대조 범위는 로컬 기동·조회, Workbench SSE·저장, 관제 실행 출처입니다.
 - 기준 코드:
   - `app/api/routers/retrieval.py`
   - `app/api/routers/generation.py`
@@ -23,17 +23,10 @@
 
 ## 권장 읽는 순서
 
-1. `api/current_api_contract.md`
-2. `data/current_data_contract.md`
-3. `frontend/current_fe_contract.md`
-4. `frontend/intelligence_fe_contract.md`
-
-## canonical 문서
-
-- `docs/10_contracts/api/current_api_contract.md`
-- `docs/10_contracts/data/current_data_contract.md`
-- `docs/10_contracts/frontend/current_fe_contract.md`
-- `docs/10_contracts/frontend/intelligence_fe_contract.md`
+1. [현재 API 계약](api/current_api_contract.md)에서 조회·검색·분석 진입점을 확인합니다.
+2. [데이터 계약](data/current_data_contract.md)에서 입력·저장 결과·출처 필드를 확인합니다.
+3. [Workbench FE-BE 계약](frontend/current_fe_contract.md)에서 검색·SSE·브라우저 저장을 확인합니다.
+4. [관제 FE 계약](frontend/intelligence_fe_contract.md)에서 저장 조회·새 분석·출처 표시를 확인합니다.
 
 ## historical 문서 처리
 
@@ -43,6 +36,6 @@
 
 `docs/60_specs`의 API, 데이터, UI 사양 중 현재 코드와 맞는 내용은 이 디렉터리로 흡수했습니다. `60_specs`는 source-spec으로 보존합니다.
 
-## 신규 제품과의 관계
+## 실행과 이력
 
-이 디렉터리는 기존 민원 기능의 참고 기준이다. 신규 회사 지식 제품은 [문서 지도](../../docs/README.md)를 통해 PRD·설계·구현·마일스톤을 확인한다. 과거 평가 결과는 [모듈별 실험](../../experiments/README.md)에 보관한다.
+독립 실행의 자료와 주소는 [로컬 실행 안내](../30_manuals/local_dev_runbook.md)에 있습니다. 과거 평가 결과는 [모듈별 실험](../../experiments/README.md)에서 당시 조건과 함께 확인합니다.

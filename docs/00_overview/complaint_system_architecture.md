@@ -1,8 +1,7 @@
-# 기존 민원 시스템 — 현재 구현 아키텍처
+# 민원 워크벤치 구현 아키텍처
 
-- 문서 상태: 기존 민원 구현 참고 기준; 신규 제품의 주 PRD가 아님
-- 문서 버전: v2.0
-- 코드 정적 확인·정리일: 2026-09-26
+- 문서 버전 v2.1
+- 현행 코드 정적 대조 2026-11-06 · `8e9de051`
 - 기준 코드:
   - `app/api/main.py`
   - `app/api/routers/retrieval.py`
@@ -17,6 +16,17 @@
   - `docs/30_manuals/local_dev_runbook.md`
 
 ## 전체 경계
+
+독립 실행은 [전용 profile](../../configs/demo/local.example.json)으로 새 대상에 복사한 검색 인덱스·관제 SQLite·화면 케이스를 사용합니다. API는 `127.0.0.1:8092`, Next.js는 `127.0.0.1:3092`에서 실행합니다. 자료 준비와 기동 순서는 [독립 실행 안내](../30_manuals/local_dev_runbook.md)에 있습니다.
+
+| 화면 | 진입점 | 주요 연결 |
+|---|---|---|
+| 민원 선택 | `/` | `/api/v1/ui/cases`의 케이스를 선택해 Workbench로 이동 |
+| Workbench | `/workbench` | 유사 사례 검색, SSE 초안 생성, 브라우저 편집본 복원 |
+| 민원 관제 | `/intelligence` | 저장된 dashboard와 중복 후보 조회, 담당자 검토 동작 |
+| 관리자 통계 | `/admin` | `/api/v1/admin/overview`로 활성 컬렉션 통계 조회 |
+
+화면 진입점은 `frontend/app/`에 있고, API는 `scripts/run_api.py`에서 `app.api.main:app`을 시작합니다. [폴더 구조](folder_structure.md)에 코드 위치를 정리합니다.
 
 ```text
 원천/가공 민원 데이터
@@ -50,11 +60,13 @@ query/case
   -> Workbench 표시
 ```
 
-주요 endpoint:
+주요 endpoint
 
 - `POST /api/v1/search`
 - `POST /api/v1/qa`
 - `POST /api/v1/qa/stream`
+
+Workbench는 검색어에 맞는 근거와 라우팅을 초안 생성에 사용합니다. 브라우저는 민원 전환 전의 응답이 현재 편집창에 들어가지 않도록 요청을 구분하고, 민원별 초안과 편집본을 로컬 저장소에 보관합니다. [FE-BE 계약](../10_contracts/frontend/current_fe_contract.md)에서 저장 키와 SSE 대체 경로를 확인합니다.
 
 ## Complaint Intelligence sidecar
 
@@ -70,7 +82,7 @@ ComplaintIntelligenceEvent[]
   -> dashboard read-model 조회
 ```
 
-주요 endpoint:
+주요 endpoint
 
 - `POST /complaint-intelligence/run-analysis`
 - `GET /complaint-intelligence/dashboard`
@@ -78,6 +90,8 @@ ComplaintIntelligenceEvent[]
 - `GET /complaint-intelligence/issue-alerts`
 - `GET /complaint-intelligence/public-insights`
 - `GET /complaint-intelligence/public-insights/{insight_id}/evidence-pack`
+
+조회 응답의 `operation=stored_read`와 분석 응답의 `operation=new_analysis`로 실행을 구분합니다. `provenance_runs`에는 최근 최대 5개의 저장된 실행 출처가 담깁니다. 시나리오 시각·대표 위치와 생성 방식은 실행 단위로 표시합니다. 각 카드와 실행 기록의 대응은 미확인입니다. [관제 FE 계약](../10_contracts/frontend/intelligence_fe_contract.md)에 표시 규칙이 있습니다.
 
 ## Duplicate Merge Recommendation Layer
 
@@ -115,26 +129,21 @@ FE는 LLM을 직접 호출하지 않습니다. 저장된 read-model을 조회하
 
 Complaint Intelligence repository는 interface로 분리되어 있습니다.
 
-- `InMemoryComplaintIntelligenceRepository`: 테스트/개발 fallback
+- `InMemoryComplaintIntelligenceRepository`: 테스트·개발용 메모리 저장소
 - `SQLiteComplaintIntelligenceRepository`: 로컬 demo/운영 준비용 기본 영속 저장소
 
 향후 Postgres 같은 운영 DB로 전환할 때는 repository interface를 기준으로 교체합니다.
 
 ## 평가와 replay
 
-- demo seed: `data/demo/complaint_intelligence_demo_events.json`
-- real replay seed: `data/complaint_intelligence/complaint_intelligence_real_replay_events.json`
-- duplicate merge demo: `data/complaint_intelligence/duplicate_merge_demo_events.json`
-- curated evaluation: `data/evaluation/complaint_intelligence_eval_scenarios.json`
-- holdout: `data/evaluation/complaint_intelligence_holdout_50.json`
+독립 실행은 profile에 지정된 보존 자료 묶음을 사용합니다. 개발용 재생에는 관제·중복 검토 시나리오 입력을 사용하고, 평가는 선별 사례와 별도 holdout으로 나눕니다. 자료 준비 조건과 결과 해석은 [재생 안내](../30_manuals/complaint_intelligence_demo_replay.md)와 [평가 안내](../30_manuals/evaluation_runbook.md)에 있습니다.
 
 평가 결과는 `reports/`에 저장합니다. PR에는 최종 리포트 중심으로 포함하고, raw response/prompt/checkpoint는 포함하지 않는 것이 기본 원칙입니다.
 
-## 2026-09-26 구현 확인 사항
-
-신규 제품 설계는 [회사 지식 아키텍처](../05_plans/company_knowledge/architecture.md)를 따른다. 이 문서의 메인 파이프라인은 기존 민원 기능 내부의 주 경로를 뜻한다.
+## 검색과 평가의 실행 경계
 
 - `app/retrieval/service.py`에서 hybrid는 선택 전략이 hybrid이고 필터가 없을 때 사용된다. routing 분석만으로 모든 요청이 다른 랭킹 전략을 사용하는 것으로 해석하지 않는다.
-- 생성·재작성 기본 모델은 EXAONE `exaone3.5:7.8b`, 온라인 평가는 Qwen `qwen3.5:4b`다.
+- 독립 실행 profile은 Gemma 생성·평가·재작성과 조건부 Qwen 피드백을 설정합니다. 자동 관제 스케줄러를 끄고 PublicAgencyInsight는 `fake` provider를 사용합니다. [기술 스택](dev_stack.md)에 구성 근거가 있습니다.
 - `app/evaluation/civil_llm_rubric.py`의 호출 그룹은 Q2 / Q3·Q4·Q5 / Q1·Q7 / Q6 / Q0으로 최초 5회이며 같은 요청에서 Q2를 재사용한 재평가는 4회다. Q0~Q7 응답 점수 구조는 유지된다.
-- 이번 확인은 코드 정적 대조이며 서버 실행·정확도·Windows 호환성 재검증 결과가 아니다.
+
+2026-09-26의 EXAONE 생성·재작성과 Qwen 4B 온라인 평가 선택은 [이전 ADR](adr_architecture_decision_record.md)에 당시 기록으로 남깁니다. 이 문서의 확인 범위는 라우터·실행 profile·FE 소스의 정적 대조입니다.

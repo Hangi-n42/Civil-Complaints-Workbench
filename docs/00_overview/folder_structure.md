@@ -1,33 +1,27 @@
-# 프로젝트 폴더 구조
+# 민원 워크벤치 폴더 구조
 
-> **2026-09-27 병합 상태 보충:** #498에서 `app/knowledge/`, `app/api/routers/knowledge.py`, `frontend/app/knowledge/`, `scripts/import_knowledge_pilot.py`가 추가됐다. 아래 목표 디렉터리 부재 설명은 #497 정리 당시 기준이다. `docs/05_plans/company_knowledge/contracts.md`, `evaluation_protocol.md`와 K2 실행 안내도 함께 유지한다.
-
-- 문서 버전: v2.1
-- 기준일: 2026-09-26
+- 문서 버전 v2.2
+- 현행 경로 대조 2026-11-06 · `8e9de051`
 
 | 경로 | 역할·현재 상태 |
 |---|---|
-| `app/api/` | 기존 민원 API |
+| `app/api/` | FastAPI 진입점, 라우터, 요청·응답 스키마 |
 | `app/retrieval/`, `app/generation/`, `app/evaluation/` | 검색·답변 생성·평가 |
 | `app/complaint_intelligence/` | 민원 관제·중복 판단 |
-| `app/ui/` | 기존 Streamlit UI 코드 |
-| `frontend/` | Next.js Workbench·Intelligence 화면 |
-| `scripts/` | 전처리·PII·적재·평가 등 기존 처리 |
-| `configs/knowledge/pilot_v1/` | 신규 제품 파일럿 자료 목록·근거·12개 과제 |
+| `app/ui/` | 기존 Streamlit 코드와 현재 케이스 API가 사용하는 데이터 어댑터 |
+| `frontend/app/`, `frontend/lib/` | Next.js 화면과 API 변환·브라우저 저장 |
+| `configs/demo/`, `scripts/standalone_demo.py` | 독립 실행 profile과 자료 복사·점검·기동 |
+| `scripts/` | 전처리, 색인, 관제 재생, 평가 도구 |
 | `data/` 및 설정된 Chroma 디렉터리 | 로컬 데이터·인덱스. 실제 경로는 설정과 실행 안내 확인 |
-| `docs/00_overview/company_knowledge_prd.md` | 신규 제품의 메인 PRD v1.4 |
-| `docs/00_overview/adr_architecture_decision_record.md` | 현재·대체·계획 아키텍처 결정 |
-| `docs/05_plans/company_knowledge/` | 신규 제품 상세 설계·구현 계획·마일스톤 |
-| `docs/00_overview/` | 신규 제품 PRD·ADR·기술 스택·기존 민원 구현 개요 |
-| `docs/10_contracts/`, `docs/20_domains/` | 기존 민원 계약·도메인 |
+| `docs/00_overview/` | 민원 PRD·아키텍처·스택과 이전 ADR |
+| `docs/10_contracts/`, `docs/20_domains/` | 민원 계약과 기능별 정책 |
 | `docs/30_manuals/` | 실행·운영 안내 |
-| `docs/70_research/company_knowledge/` | 신규 제품 조사·검수·파일럿 기록 |
 | `docs/90_archive/` | 종료된 계획·이전 문서 감사 |
 | `docs/90_archive/complaint_system/` | 과거 민원 ADR v2.2·UX 시나리오·검색 선정서·MVP/WBS |
 | `experiments/<module>/` | 모듈별 과거 실험 보고서 |
 | `reports/` | 기존 스크립트 산출물·평가 절차 |
 
-`app/knowledge/`와 지식 전용 라우터·화면은 목표 설계이며 현재 존재하는 소스로 표시하지 않습니다. [문서 지도](../README.md)와 [실행 안내](../30_manuals/local_dev_runbook.md)를 참고합니다.
+화면과 API의 연결은 [아키텍처](complaint_system_architecture.md), 자료의 실행 경로는 [독립 실행 안내](../30_manuals/local_dev_runbook.md)에 있습니다. 분리 전 K2와 회사 지식 경로는 `split-base/astergraph-f7548838` 태그의 작업 트리와 [이전 ADR](adr_architecture_decision_record.md)에서 확인합니다.
 
 ## 2026-09-28 불필요한 추적 파일 정리
 

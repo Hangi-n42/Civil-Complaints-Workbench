@@ -1,7 +1,7 @@
 # Intelligence Dashboard FE 계약
 
 - 문서 상태: canonical
-- 최종 확인일: 2026-06-21
+- 관제 조회·실행 출처 대조 2026-11-06 · `8e9de051`
 - 기준 코드:
   - `frontend/app/intelligence/page.tsx`
   - `frontend/lib/api.ts`
@@ -14,11 +14,11 @@
 
 ## 기본 원칙
 
-Intelligence 화면은 실시간 LLM 생성 대기 화면이 아니라, backend repository에 저장된 관제 read-model을 조회하는 화면입니다.
+Intelligence 화면의 초기 진입과 `저장 결과 다시 조회`는 backend repository의 관제 read-model을 조회합니다.
 
-FE는 다음 두 축을 함께 표시합니다.
+FE는 세 종류의 저장 결과를 표시합니다.
 
-- 민원 핫스팟/이슈 자동감지: IssueAlert
+- 민원 핫스팟·이슈 경보 `IssueAlert`
 - 행정 개선 인사이트: PublicAgencyInsight
 - 중복 병합 추천: DuplicateMergeRecord
 
@@ -36,6 +36,10 @@ query:
 
 - `status`
 - `type`
+
+`data.operation=stored_read`는 저장 조회 응답입니다. `data.provenance_runs`는 최근 실행 최대 5개를 담으며, 화면은 자료 출처 정책·분석 기준 시각·시나리오 배치 여부·생성 방식을 표시합니다. 저장된 근거가 없는 항목은 미확인으로 표시합니다. 실행 기록과 개별 카드의 대응은 미확인입니다. [출처 데이터 계약](../data/current_data_contract.md#관제-실행-출처)과 [출처 표시 컴포넌트](../../../frontend/components/intelligence/ProvenancePanel.tsx)에 세부 규칙이 있습니다.
+
+지도는 저장된 분석 중심이나 시연용 행정구역 대표 위치를 사용합니다. `fake` provider에서 생성된 결과와 로컬 모델 호출, 템플릿 대체 결과는 실행 기록에서 구분합니다.
 
 응답 `data.summary` 주요 필드:
 
@@ -117,6 +121,7 @@ Backend endpoint:
 요청:
 
 - `request_id`
+- `source_provenance`는 선택 입력입니다. 준비 과정에서 확인한 출처 정책과 시각·좌표·구조화 기준을 담습니다.
 - `events[]`
   - `id`
   - `received_at`
@@ -126,7 +131,7 @@ Backend endpoint:
   - `status`
   - `structured_elements`
 
-응답은 `GET /dashboard`와 같은 `IntelDashboardData` 형태입니다.
+응답은 `GET /dashboard`와 같은 `IntelDashboardData` 형태이며 `operation=new_analysis`를 반환합니다. 대시보드의 다시 조회 동작은 GET 경로를 사용합니다.
 
 ## EvidencePack 조회
 
