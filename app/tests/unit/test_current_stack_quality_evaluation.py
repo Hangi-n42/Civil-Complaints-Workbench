@@ -193,6 +193,10 @@ async def test_replay_requires_verified_identity_exact_input_and_live_provenance
     replay = quality.CallLedger(manifest, tmp_path, "stored_replay", [saved])
     replay.case_id = "A"
     assert await replay.call(forbidden, "합성 입력") == "합성 응답"
+    with pytest.raises(quality.EvaluationHalt, match="replay_evidence_exhausted"):
+        await replay.call(forbidden, "후속 평가 입력")
+    assert replay.records[-1]["sent_to_model"] is False
+    assert replay.records[-1]["raw_response_available"] is False
     replay = quality.CallLedger(manifest, tmp_path, "stored_replay", [saved])
     replay.case_id = "A"
     with pytest.raises(quality.EvaluationHalt, match="mismatch"):

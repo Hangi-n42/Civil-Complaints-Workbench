@@ -415,7 +415,9 @@ class CallLedger:
             if self.mode == "stored_replay":
                 if not request["model_digest"]:
                     raise EvaluationHalt("replay_model_identity_unverified")
-                saved = next(self.replay)
+                saved = next(self.replay, None)
+                if saved is None:
+                    raise EvaluationHalt("replay_evidence_exhausted")
                 if (saved.get("mode") != "live_inference" or saved["fingerprint"] != fingerprint
                     or saved.get("wire_request") != expected_wire or saved.get("http_response", {}).get("status") != 200):
                     raise EvaluationHalt("replay_request_or_provenance_mismatch")
