@@ -41,6 +41,6 @@ Complaint Intelligence는 메인 RAG/QA 파이프라인을 대체하지 않는 �
 3. `duplicate_merge_policy.md`
 4. `pii_safety_policy.md`
 
-## 신규 제품과의 관계
+## 실행과 검토
 
-기존 민원 관제의 참고 기준이다. 신규 개발 기준은 [문서 지도](../../README.md)를 따른다.
+로컬 시연은 [독립 실행 안내](../../30_manuals/local_dev_runbook.md), 관제 자료의 출처와 생성 방식 표시는 [재생 자료 안내](../../30_manuals/complaint_intelligence_demo_replay.md#출처와-실행-표시-읽기-2026-11-05)에서 확인합니다.
